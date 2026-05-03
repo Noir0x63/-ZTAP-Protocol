@@ -146,7 +146,9 @@ ZTAP v3.1 introduces a **Native Desktop Client** (Electron) designed to complete
 2. **Embedded Tor:** Bundles the Tor binary and dynamically generates `torrc` configurations, bypassing port collisions and read-only permission errors.
 3. **Volatile Identity:** Automatically wipes previous hidden service keys and bootstraps a new `.onion` address upon every launch.
 4. **Local Dashboard Bridge:** Securely routes the operator to their local, encrypted admin dashboard (`localhost:3000/route`) while clients connect via the `.onion` network.
-5. **Cross-Platform Compilation:** Supports Windows `.exe` via NSIS and Linux `.AppImage` (the standard for **Tails OS**).
+5. **Session Governance:** Toggle the relay status (ON/OFF) to instantly disconnect all clients and reject new sessions.
+6. **Active Self-Destruct:** One-click emergency protocol that broadcasts a nuke signal to all clients and deletes the binary from the host system after a 5-second countdown.
+7. **Cross-Platform Compilation:** Supports Windows `.exe` via NSIS and Linux `.AppImage` (the standard for **Tails OS**).
 
 ### Quick Start (Compiled Binary)
 1. Download the compiled release for your OS (`.exe` for Windows, `.AppImage` for Linux/Tails).
@@ -155,6 +157,7 @@ ZTAP v3.1 introduces a **Native Desktop Client** (Electron) designed to complete
 4. Wait for the Tor subsystem to bootstrap (0% to 100%).
 5. Click **Copy .onion Link** and send it to your contact over a secure channel.
 6. Click **Open Admin Panel** to manage incoming messages locally in your browser.
+7. Use **Toggle Sessions** to silence the relay or **Self-Destruct** for emergency binary removal.
 
 > ⚠️ **Remember your passphrase.** There is no "forgot password" mechanism. Without it, the master identity is cryptographically irretrievable.
 

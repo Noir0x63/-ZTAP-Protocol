@@ -176,7 +176,15 @@ function connectAdmin() {
             const frame = JSON.parse(new TextDecoder().decode(new Uint8Array(e.data, 4, len)));
 
             if (frame.type === 'AUTH_CHALLENGE') {
-                const sig = await crypto.subtle.sign({ name: 'RSA-PSS', saltLength: 32 }, masterSignKey, new TextEncoder().encode(frame.nonce));
+                // PATCH VULN-03: Domain Separation — Prevents Blind Signing Oracle.
+                // The raw server nonce is NEVER signed directly. Prepending the
+                // fixed context prefix 'ZTAP_ADMIN_AUTH:' cryptographically binds
+                // this signature exclusively to the admin authentication domain.
+                // A valid signature over this prefixed payload is mathematically
+                // inert in any other protocol context, neutralizing type confusion
+                // and cross-protocol replay attacks.
+                const separatedNonce = 'ZTAP_ADMIN_AUTH:' + frame.nonce;
+                const sig = await crypto.subtle.sign({ name: 'RSA-PSS', saltLength: 32 }, masterSignKey, new TextEncoder().encode(separatedNonce));
                 sendStrictFrame({ type: 'ADMIN_AUTH', signature: bufferToBase64(sig) });
             }
 

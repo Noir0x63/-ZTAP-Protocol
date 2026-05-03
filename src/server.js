@@ -357,7 +357,13 @@ wss.on('connection', (ws) => {
                 const pubKey = await getMasterPublicKey();
                 if (!pubKey) return ws.close(1008);
                 try {
-                    const isValid = crypto.verify('sha256', Buffer.from(stored.nonce), {
+                    // PATCH VULN-03: Domain Separation — Prevents Blind Signing Oracle.
+                    // The server reconstructs the same prefixed domain string that the
+                    // legitimate admin client signs. Any raw (un-prefixed) signature
+                    // will ALWAYS fail this verification — even a cryptographically
+                    // valid one — providing symmetric defense-in-depth against oracle abuse.
+                    const separatedNonce = 'ZTAP_ADMIN_AUTH:' + stored.nonce;
+                    const isValid = crypto.verify('sha256', Buffer.from(separatedNonce), {
                         key: pubKey,
                         padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
                         saltLength: 32

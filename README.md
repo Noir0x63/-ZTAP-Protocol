@@ -74,8 +74,7 @@ ZTAP is designed for **Zero-Persistence**.
 
 ### 5. Session Governance & Access Control
 *   **Session Expiry:** All sessions expire after 1 hour, requiring re-authentication.
-*   **Concurrent Limits:** Maximum 2 connections per session ID, 500 total server-wide.
-*   **Session Governance:** 1-hour session expiry and strict concurrent connection limits.
+*   **Concurrency Governance:** Maximum 2 connections per session ID, with a 500-connection global threshold.
 *   **Admin Route Rotation:** Hourly HMAC-derived admin paths with serverNonce entropy — routes cannot be pre-calculated even with leaked secrets.
 *   **Input Sanitization:** All user-provided fields are validated and stripped of control characters before processing.
 *   **Vault Write Mutex:** Promise-chained serialization prevents race conditions and JSON corruption under concurrent write pressure.

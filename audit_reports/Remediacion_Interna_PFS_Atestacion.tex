@@ -35,7 +35,7 @@
 
 \lstset{style=mystyle}
 
-\title{\textbf{Internal Audit \& Remediation Report}\\ \Large ZTAP Protocol v3.1 IRONCLAD}
+\title{\textbf{Internal Audit \& Remediation Report}\\ \Large OMEGA Protocol v3.1 IRONCLAD}
 \author{Eduardo "Noir0x63" Camarillo}
 \date{\today}
 
@@ -44,14 +44,14 @@
 \maketitle
 
 \begin{abstract}
-This document details the security audit process applied to the ZTAP v3.1 protocol, focusing specifically on the mitigation of two critical vulnerabilities (VULN-01 and VULN-02). It documents the initial identification of the flaws, the defective initial implementation that generated silent failure states, and the subsequent re-audit that led to the final resolution and implementation of true Perfect Forward Secrecy (PFS) and ECDSA asymmetric attestation.
+This document details the security audit process applied to the Protocolo OMEGA v3.1, focusing specifically on the mitigation of two critical vulnerabilities (VULN-01 and VULN-02). It documents the initial identification of the flaws, the defective initial implementation that generated silent failure states, and the subsequent re-audit that led to the final resolution and implementation of true Perfect Forward Secrecy (PFS) and ECDSA asymmetric attestation.
 \end{abstract}
 
 \tableofcontents
 \newpage
 
 \section{Introduction}
-During routine security posture and Zero Trust model evaluations of the ZTAP v3.1 protocol, structural vulnerabilities were identified in the AES-GCM key derivation process and the client attestation mechanism. The criticality of these vulnerabilities required a two-phase remediation process due to deficiencies found in the first proposed patch.
+During routine security posture and Zero Trust model evaluations of the Protocolo OMEGA v3.1, structural vulnerabilities were identified in the AES-GCM key derivation process and the client attestation mechanism. The criticality of these vulnerabilities required a two-phase remediation process due to deficiencies found in the first proposed patch.
 
 \section{Initial Vulnerability Identification}
 
@@ -73,13 +73,13 @@ The engineering team implemented an initial patch targeting VULN-01. The change 
 
 \section{Final Remediation and Detailed Resolution}
 
-After suspending the first attempt, a coordinated patch was designed and implemented across three core files (\texttt{client.js}, \texttt{ztap-worker.js}, \texttt{server.js}).
+After suspending the first attempt, a coordinated patch was designed and implemented across three core files (\texttt{client.js}, \texttt{omega-worker.js}, \texttt{server.js}).
 
 \subsection{Definitive PFS Mitigation (Findings B and C)}
 Hard failure barriers were added at multiple points in the connection lifecycle:
 
 \begin{lstlisting}[language=JavaScript, caption=Strict guard against PFS degradation]
-// ztap-worker.js
+// omega-worker.js
 if (!d.ecdhSecret || !Array.isArray(d.ecdhSecret) || d.ecdhSecret.length < 32) {
     self.postMessage({ type: 'ERROR', error: 'SEC_FAULT_NO_ECDH' });
     return; // Hard fail. Security is non-negotiable.

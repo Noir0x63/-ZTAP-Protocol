@@ -34,7 +34,7 @@ function encryptPrivateKey(pemString, passphrase) {
 
 async function main() {
     console.log('╔══════════════════════════════════════════════════════════════╗');
-    console.log('║     ZTAP KEYGEN — RSA-4096 + ENCRYPTED-AT-REST             ║');
+    console.log('║     OMEGA KEYGEN — RSA-4096 + ENCRYPTED-AT-REST            ║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
     console.log('');
 
@@ -63,7 +63,7 @@ async function main() {
     fs.writeFileSync('master_private.enc', encryptedBlob);
 
     const adminSalt = crypto.randomBytes(32);
-    const adminSecret = crypto.scryptSync(passphrase, Buffer.concat([adminSalt, Buffer.from('ztap:admin:hmac')]), 32, { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
+    const adminSecret = crypto.scryptSync(passphrase, Buffer.concat([adminSalt, Buffer.from('omega:admin:hmac')]), 32, { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
     const serverNonce = crypto.randomBytes(32);
     const secretsEnvelope = {
         version: 2,

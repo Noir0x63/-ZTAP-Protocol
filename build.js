@@ -57,7 +57,7 @@ function minifyJS(code) {
         .trim();
 }
 
-const workerRaw = fs.readFileSync('src/ztap-worker.js', 'utf8');
+const workerRaw = fs.readFileSync('src/omega-worker.js', 'utf8');
 const workerMinified = minifyJS(workerRaw);
 const goldHash = crypto.createHash('sha512').update(workerMinified).digest('hex');
 
@@ -71,7 +71,7 @@ const adminClientRaw = fs.readFileSync('src/admin-client.js', 'utf8');
 const adminClientMinified = minifyJS(adminClientRaw);
 
 fs.mkdirSync('public', { recursive: true });
-fs.writeFileSync('public/ztap-worker.js', workerMinified);
+fs.writeFileSync('public/omega-worker.js', workerMinified);
 fs.writeFileSync('public/client.js', clientMinified);
 fs.writeFileSync('public/admin-client.js', adminClientMinified);
 fs.copyFileSync('src/index.html', 'public/index.html');
@@ -80,7 +80,7 @@ fs.writeFileSync('public/GOLD_HASH.txt', goldHash);
 
 console.log('');
 console.log('══════════════════════════════════════════════════════════════════');
-console.log('  BUILD COMPLETE — ZTAP IRONCLAD v3.1');
+console.log('  BUILD COMPLETE — PROTOCOLO OMEGA IRONCLAD v3.1');
 console.log('══════════════════════════════════════════════════════════════════');
 console.log('');
 console.log('  [ADMIN] Active route (hourly rotation + serverNonce):');

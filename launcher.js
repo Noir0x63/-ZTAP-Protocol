@@ -27,12 +27,12 @@ function drawProgressBar(percent, status = '') {
 
 console.clear();
 console.log(`${THEME.GREEN}${THEME.BOLD}====================================================${THEME.RESET}`);
-console.log(`${THEME.GREEN}${THEME.BOLD}             TERMINAL - ZTAP PROTOCOL              ${THEME.RESET}`);
+console.log(`${THEME.GREEN}${THEME.BOLD}             TERMINAL - PROTOCOLO OMEGA             ${THEME.RESET}`);
 console.log(`${THEME.GREEN}${THEME.BOLD}              IRONCLAD v3.1 (HARDENED)             ${THEME.RESET}`);
 console.log(`${THEME.GREEN}${THEME.BOLD}====================================================${THEME.RESET}\n`);
 
 if (!fs.existsSync('master_public.pem') || !fs.existsSync('master_private.enc')) {
-    process.stdout.write(`${THEME.BOLD}[!]${THEME.RESET} ${THEME.WHITE}Identity not found. Starting ZTAP KEYGEN...${THEME.RESET}\n\n`);
+    process.stdout.write(`${THEME.BOLD}[!]${THEME.RESET} ${THEME.WHITE}Identity not found. Starting OMEGA KEYGEN...${THEME.RESET}\n\n`);
     try {
         execSync('node keygen.js', { stdio: 'inherit' });
         process.stdout.write(`\n${THEME.BOLD}[✓]${THEME.RESET} ${THEME.WHITE}Identity generated successfully.${THEME.RESET}\n\n`);

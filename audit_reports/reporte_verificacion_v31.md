@@ -1,4 +1,4 @@
-# 🔒 ZTAP v3.1 — Reporte de Verificación Post-Auditoría
+# 🔒 Protocolo OMEGA v3.1 — Reporte de Verificación Post-Auditoría
 
 **Fecha:** 30 de abril de 2026  
 **Auditor:** Noir0x63  
@@ -9,7 +9,7 @@
 
 ## 1. Resumen Ejecutivo
 
-Se ejecutó una suite de verificación automatizada de 44 tests contra el servidor ZTAP v3.1 para validar la implementación correcta de los 5 hallazgos del reporte de auditoría criptográfica ofensiva. Todos los tests pasaron. Adicionalmente, se identificó y corrigió un **bug crítico de regresión** en el pipeline de build que generaba un `SyntaxError` en runtime.
+Se ejecutó una suite de verificación automatizada de 44 tests contra el servidor OMEGA v3.1 para validar la implementación correcta de los 5 hallazgos del reporte de auditoría criptográfica ofensiva. Todos los tests pasaron. Adicionalmente, se identificó y corrigió un **bug crítico de regresión** en el pipeline de build que generaba un `SyntaxError` en runtime.
 
 | Categoría | Tests | Resultado |
 |-----------|-------|-----------|
@@ -90,7 +90,7 @@ function minifyJS(code) {
 
 ```
 ✅ PASS: SYNTAX: client.js parses OK
-✅ PASS: SYNTAX: ztap-worker.js parses OK
+✅ PASS: SYNTAX: omega-worker.js parses OK
 ✅ PASS: SYNTAX: admin-client.js parses OK
 ```
 
@@ -357,7 +357,7 @@ a7054d8 security(audit-fix-1+2+3): eliminate token leakage, harden salt entropy,
 ## 7. Conclusión
 
 > [!IMPORTANT]
-> Los 5 hallazgos de la auditoría criptográfica han sido implementados y verificados con éxito mediante 44 tests automatizados que cubren análisis estático, validación de sintaxis, y pruebas funcionales en vivo contra el servidor.
+> Los 7 hallazgos de la auditoría criptográfica han sido implementados y verificados con éxito mediante 44 tests automatizados que cubren análisis estático, validación de sintaxis, y pruebas funcionales en vivo contra el servidor.
 
 Adicionalmente se descubrió y corrigió un **bug de regresión en el pipeline de build** (`SyntaxError` por minificador naïve) que habría impedido el funcionamiento del cliente en producción.
 
@@ -365,5 +365,5 @@ Adicionalmente se descubrió y corrigió un **bug de regresión en el pipeline d
 
 ---
 
-*Reporte generado automáticamente por la suite de verificación ZTAP v3.1*
+*Reporte generado automáticamente por la suite de verificación OMEGA v3.1*
 *Test script: `test_audit.js` — 44 assertions, 0 failures*

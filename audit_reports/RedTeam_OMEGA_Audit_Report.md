@@ -1,4 +1,4 @@
-# INFORME DE AUDITORÍA CRIPTOGRÁFICA RED TEAM: ZTAP v3.1 IRONCLAD
+# INFORME DE AUDITORÍA CRIPTOGRÁFICA RED TEAM: OMEGA v3.1 IRONCLAD
 
 **OBJETIVO:** Evaluación agresiva (Zero Trust) de la implementación E2EE, mecanismos de atestación y manejo de llaves.
 **RESULTADO GENERAL:** Múltiples vulnerabilidades de severidad CRÍTICA que destruyen completamente las garantías de confidencialidad a largo plazo (Forward Secrecy), autenticidad e integridad del protocolo. El sistema no debe ser utilizado en producción bajo el modelo actual.
@@ -48,7 +48,7 @@ JUSTIFICACIÓN DEL PARCHE: El código actual es "Seguridad por Oscuridad" y "Tea
 
 DICTAMEN: CRÍTICO
 
-VULNERABILIDAD DESCUBIERTA: Fuga intencionada de Llave Privada Simétrica. En la rutina de atestación (`src/ztap-worker.js`), el cliente deriva una llave HMAC estática (`attestHmacKey`), la marca explícitamente con `extractable=true` (bajo el falso comentario `AUDIT FIX 3`), y la exporta en texto plano en formato 'raw'. Luego, transmite esta llave simétrica privada por la red hacia el servidor en el paquete JSON `INIT` (`attestKey: secureBufferToBase64(rawAttestKey)`) para que el servidor "valide" los desafíos. Compartir la llave privada simétrica anula el modelo Challenge-Response. El servidor (o cualquier atacante MITM) obtiene el secreto y puede falsificar las atestaciones del cliente indefinidamente.
+VULNERABILIDAD DESCUBIERTA: Fuga intencionada de Llave Privada Simétrica. En la rutina de atestación (`src/omega-worker.js`), el cliente deriva una llave HMAC estática (`attestHmacKey`), la marca explícitamente con `extractable=true` (bajo el falso comentario `AUDIT FIX 3`), y la exporta en texto plano en formato 'raw'. Luego, transmite esta llave simétrica privada por la red hacia el servidor en el paquete JSON `INIT` (`attestKey: secureBufferToBase64(rawAttestKey)`) para que el servidor "valide" los desafíos. Compartir la llave privada simétrica anula el modelo Challenge-Response. El servidor (o cualquier atacante MITM) obtiene el secreto y puede falsificar las atestaciones del cliente indefinidamente.
 
 VECTOR DE EXPLOTACIÓN (PoC):
 1. Un atacante se posiciona como MITM o compromete el nodo WebSocket del servidor.
@@ -61,7 +61,7 @@ IMPACTO (CVSS Estimado): 8.5 (Alto). Compromiso total de la Autenticidad e Integ
 
 EL PARCHE (Diff/Código):
 ```javascript
-// Archivo: src/ztap-worker.js
+// Archivo: src/omega-worker.js
 // Reescritura para usar Criptografía Asimétrica (ECDSA) en lugar de HMAC simétrico.
 
 // 1. Eliminar deriveAttestKey y reemplazar por generación de par ECDSA efímero
@@ -127,7 +127,7 @@ EL PARCHE (Diff/Código):
 // 1. Modificar el bloque de firma de AUTH_CHALLENGE para incluir separación de dominio
             if (frame.type === 'AUTH_CHALLENGE') {
                 // Forzar separación de dominio (Domain Separation)
-                const contextPrefix = "ZTAP_ADMIN_AUTH_V3:";
+                const contextPrefix = "OMEGA_ADMIN_AUTH:";
                 if (typeof frame.nonce !== 'string' || frame.nonce.length > 64) return;
                 
                 const dataToSign = new TextEncoder().encode(contextPrefix + frame.nonce);
@@ -139,7 +139,7 @@ EL PARCHE (Diff/Código):
 // 2. Modificar la verificación en el servidor
             if (data.type === 'ADMIN_AUTH') {
                 // ...
-                const contextPrefix = "ZTAP_ADMIN_AUTH_V3:";
+                const contextPrefix = "OMEGA_ADMIN_AUTH:";
                 try {
                     const isValid = crypto.verify('sha256', Buffer.from(contextPrefix + stored.nonce), {
                         key: pubKey,
@@ -149,9 +149,9 @@ EL PARCHE (Diff/Código):
                 // ...
 ```
 
-JUSTIFICACIÓN DEL PARCHE: Al prefijar un string de contexto estricto (`ZTAP_ADMIN_AUTH_V3:`), nos aseguramos de que las firmas generadas por este flujo nunca puedan ser reutilizadas o interpretadas erróneamente en otros contextos del sistema que dependan de la misma llave asimétrica, previniendo ataques de tipo Cross-Protocol o Blind Signing Oracle.
+JUSTIFICACIÓN DEL PARCHE: Al prefijar un string de contexto estricto (`OMEGA_ADMIN_AUTH:`), nos aseguramos de que las firmas generadas por este flujo nunca puedan ser reutilizadas o interpretadas erróneamente en otros contextos del sistema que dependan de la misma llave asimétrica, previniendo ataques de tipo Cross-Protocol o Blind Signing Oracle.
 
 ---
 
 ### CONCLUSIÓN DEL RED TEAM
-El protocolo ZTAP v3.1 exhibe deficiencias graves en la arquitectura de cifrado. La ilusión de Perfect Forward Secrecy combinada con la exfiltración silenciosa de llaves simétricas hacia componentes no confiables (Zero Trust) revela que la implementación actual depende de una confidencialidad engañosa. Se requiere la paralización de su uso hasta refactorizar la derivación de llaves para integrar entropía efímera de manera asimétrica.
+El Protocolo OMEGA exhibe deficiencias graves en la arquitectura de cifrado en su diseño previo. La ilusión de Perfect Forward Secrecy combinada con la exfiltración silenciosa de llaves simétricas hacia componentes no confiables (Zero Trust) revela que la implementación original dependía de una confidencialidad engañosa. Se requiere la paralización de su uso hasta refactorizar la derivación de llaves para integrar entropía efímera de manera asimétrica.

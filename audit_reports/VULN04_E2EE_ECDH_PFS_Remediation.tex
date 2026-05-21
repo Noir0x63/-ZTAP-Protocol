@@ -81,7 +81,7 @@
 
 % --- Document Metadata ---
 \hypersetup{
-    pdftitle={ZTAP VULN-04 Audit Report --- E2EE ECDH / PFS Architectural Failure},
+    pdftitle={OMEGA VULN-04 Audit Report --- E2EE ECDH / PFS Architectural Failure},
     pdfauthor={Eduardo Camarillo},
     colorlinks=true,
     linkcolor=blue,
@@ -90,7 +90,7 @@
 
 \title{
     \textbf{Internal Audit \& Remediation Report}\\[0.5em]
-    \Large ZTAP Protocol v3.1 IRONCLAD\\[0.3em]
+    \Large OMEGA Protocol v3.1 IRONCLAD\\[0.3em]
     \large \texttt{VULN-04: Non-E2EE ECDH / Perfect Forward Secrecy Architectural Failure}\\[1em]
     \normalsize \textcolor{criticalred}{\textbf{SEVERITY: CRITICAL}} \quad
     \textcolor{safegreen}{\textbf{STATUS: MITIGATED}}
@@ -98,7 +98,7 @@
 \author{
     Eduardo ``Noir0x63'' Camarillo\\
     \small Internal Red Team Security Auditor\\
-    \small \texttt{ZTAP Zero-Trust Architecture Protocol}
+    \small \texttt{OMEGA Zero-Trust Architecture Protocol}
 }
 \date{May 21, 2026}
 
@@ -111,7 +111,7 @@
 \vspace{1em}
 
 \begin{abstract}
-This document constitutes a formal internal security audit report for the ZTAP (Zero-Trust Architecture Protocol) v3.1 IRONCLAD, specifically addressing the critical vulnerability designated \textbf{VULN-04}: the absence of End-to-End (E2EE) ECDH key exchange, resulting in the complete destruction of Perfect Forward Secrecy (PFS). The report documents the identification of the design flaw, its cryptographic attack surface (Harvest Now, Decrypt Later), a formal proof of why the original design fails to satisfy the PFS property, the architectural remediation applied across four modules (\texttt{server.js}, \texttt{client.js}, \texttt{ztap-worker.js}, \texttt{admin-client.js}), and the subsequent verification confirming that the corrected protocol achieves true PFS under the standard Diffie-Hellman security assumptions.
+This document constitutes a formal internal security audit report for the Protocolo OMEGA v3.1 IRONCLAD, specifically addressing the critical vulnerability designated \textbf{VULN-04}: the absence of End-to-End (E2EE) ECDH key exchange, resulting in the complete destruction of Perfect Forward Secrecy (PFS). The report documents the identification of the design flaw, its cryptographic attack surface (Harvest Now, Decrypt Later), a formal proof of why the original design fails to satisfy the PFS property, the architectural remediation applied across four modules (\texttt{server.js}, \texttt{client.js}, \texttt{omega-worker.js}, \texttt{admin-client.js}), and the subsequent verification confirming that the corrected protocol achieves true PFS under the standard Diffie-Hellman security assumptions.
 \end{abstract}
 
 \tableofcontents
@@ -121,7 +121,7 @@ This document constitutes a formal internal security audit report for the ZTAP (
 \section{Introduction and Scope}
 % =========================================================
 
-During the fourth cycle of the internal Red Team security audit of the ZTAP v3.1 protocol---conducted following the successful mitigation of VULN-01 (Fake PFS / Static KDF Binding), VULN-02 (HMAC Attestation Key Leakage), and VULN-03 (Blind Signing Oracle / Domain Separation Failure)---a critical \textit{architectural} design flaw was identified in the ECDH key exchange flow. Unlike the previous findings, which targeted specific cryptographic operations, VULN-04 is a \textbf{protocol composition failure} that renders the entire PFS mechanism inert despite the correct usage of individually sound cryptographic primitives.
+During the fourth cycle of the internal Red Team security audit of the Protocolo OMEGA v3.1---conducted following the successful mitigation of VULN-01 (Fake PFS / Static KDF Binding), VULN-02 (HMAC Attestation Key Leakage), and VULN-03 (Blind Signing Oracle / Domain Separation Failure)---a critical \textit{architectural} design flaw was identified in the ECDH key exchange flow. Unlike the previous findings, which targeted specific cryptographic operations, VULN-04 is a \textbf{protocol composition failure} that renders the entire PFS mechanism inert despite the correct usage of individually sound cryptographic primitives.
 
 \subsection{Audit Classification}
 
@@ -153,7 +153,7 @@ Status & \textcolor{safegreen}{\textbf{MITIGATED}} \\
 \midrule
 \texttt{src/server.js} & Node.js WebSocket relay server & Active ECDH participant (should be ZK relay) \\
 \texttt{src/client.js} & Browser-side user client & ECDH with server instead of admin \\
-\texttt{src/ztap-worker.js} & Isolated crypto Web Worker & ecdhSecret leaked in RSA payload \\
+\texttt{src/omega-worker.js} & Isolated crypto Web Worker & ecdhSecret leaked in RSA payload \\
 \texttt{src/admin-client.js} & Browser-side admin client & No local ECDH; secret extracted from RSA \\
 \bottomrule
 \end{tabularx}
@@ -226,7 +226,7 @@ if (data.type === 'ECDH_CLIENT_KEY') {
     \end{lstlisting}
 
     \item The client's Worker serializes the \texttt{ecdhSecret} into the RSA-OAEP encrypted INIT payload and sends it over the network:
-    \begin{lstlisting}[language=JavaScript, caption=ecdhSecret embedded in RSA payload (ztap-worker.js --- BEFORE PATCH)]
+    \begin{lstlisting}[language=JavaScript, caption=ecdhSecret embedded in RSA payload (omega-worker.js --- BEFORE PATCH)]
 const initPayloadBuf = enc.encode(JSON.stringify({
     token: d.token,
     username: d.username,
@@ -260,7 +260,7 @@ This design \textbf{completely and irrecoverably destroys Perfect Forward Secrec
 The vulnerability manifests through three compounding design failures:
 
 \begin{enumerate}
-    \item \textbf{The server is a cryptographic participant:} The relay server generates ECDH key pairs, computes shared secrets, and stores them in the \texttt{sessionECDH} Map. This directly violates the Zero-Knowledge design principle of ZTAP. The server has the cryptographic capability to derive every client's AES session key.
+    \item \textbf{The server is a cryptographic participant:} The relay server generates ECDH key pairs, computes shared secrets, and stores them in the \texttt{sessionECDH} Map. This directly violates the Zero-Knowledge design principle of the OMEGA Protocol. The server has the cryptographic capability to derive every client's AES session key.
 
     \item \textbf{The ephemeral secret is serialized and transported:} The \texttt{ecdhSecret} is converted from a volatile in-memory \texttt{Uint8Array} to a serialized JSON field, encrypted with a long-term key, and transmitted. A truly ephemeral secret must \textit{never} be serialized or leave local memory in any form---encrypted or otherwise.
 
@@ -452,9 +452,9 @@ if (frame.type === 'ECDH_EXCHANGE') {
 }
 \end{lstlisting}
 
-\subsection{Worker Patch: Clean RSA Payload (ztap-worker.js)}
+\subsection{Worker Patch: Clean RSA Payload (omega-worker.js)}
 
-\begin{lstlisting}[language=JavaScript, caption=Cleaned INIT payload (ztap-worker.js --- PATCHED)]
+\begin{lstlisting}[language=JavaScript, caption=Cleaned INIT payload (omega-worker.js --- PATCHED)]
 const initPayloadBuf = enc.encode(JSON.stringify({
     token: d.token,
     username: d.username,
@@ -611,7 +611,7 @@ The long-term key does not enable recovery of any session key. $\square$
 
 \begin{warningbox}
 \textbf{Operational Note: Admin Availability Dependency}\\
-The E2EE ECDH design introduces a dependency: the client cannot initialize its cryptographic Worker until the Admin has responded to the ECDH exchange. If the Admin is offline when the client connects, the client will wait in a pre-initialized state until the Admin comes online and the server replays the pending ECDH public key. This is an inherent tradeoff of true E2EE PFS and is consistent with the security-first design philosophy of ZTAP.
+The E2EE ECDH design introduces a dependency: the client cannot initialize its cryptographic Worker until the Admin has responded to the ECDH exchange. If the Admin is offline when the client connects, the client will wait in a pre-initialized state until the Admin comes online and the server replays the pending ECDH public key. This is an inherent tradeoff of true E2EE PFS and is consistent with the security-first design philosophy of OMEGA.
 \end{warningbox}
 
 % =========================================================
@@ -651,13 +651,13 @@ The remediation achieves the following security properties:
     \item \textbf{Clean Channel Separation:} The RSA channel is now strictly limited to identity and token transport. The ECDH channel is strictly limited to ephemeral key agreement. No cross-contamination of security domains.
 \end{itemize}
 
-With the mitigation of all four critical vulnerabilities (VULN-01 through VULN-04), the ZTAP v3.1 IRONCLAD protocol's core cryptographic architecture is assessed as \textbf{sound} under standard computational hardness assumptions (RSA, CDH on P-256, AES-GCM IND-CCA2).
+With the mitigation of all four critical vulnerabilities (VULN-01 through VULN-04), the OMEGA protocol's core cryptographic architecture is assessed as \textbf{sound} under standard computational hardness assumptions (RSA, CDH on P-256, AES-GCM IND-CCA2).
 
 \vspace{2em}
 \hrule
 \vspace{1em}
 \noindent\textbf{Auditor:} Eduardo ``Noir0x63'' Camarillo\\
-\textbf{Protocol:} ZTAP Zero-Trust Architecture Protocol v3.1 IRONCLAD\\
+\textbf{Protocol:} Protocolo OMEGA (Zero-Trust Architecture Protocol) v3.1 IRONCLAD\\
 \textbf{Audit Type:} Internal Red Team Review --- Cycle 4\\
 \textbf{Date:} May 21, 2026\\
 \textbf{Next Review:} Upon implementation of Findings R1, R2, R3

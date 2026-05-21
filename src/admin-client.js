@@ -132,7 +132,7 @@ async function deriveKey(token, salt, ecdhSecret) {
         {
             name: 'HKDF',
             salt: hkdfSalt,
-            info: new TextEncoder().encode('ztap-v3-msg-key'),
+            info: new TextEncoder().encode('omega-v3-msg-key'),
             hash: 'SHA-256'
         },
         hkdfBase,
@@ -210,7 +210,7 @@ function connectAdmin() {
 
             if (frame.type === 'AUTH_CHALLENGE') {
                 // PATCH VULN-03: Domain Separation — Prevents Blind Signing Oracle.
-                const separatedNonce = 'ZTAP_ADMIN_AUTH:' + frame.nonce;
+                const separatedNonce = 'OMEGA_ADMIN_AUTH:' + frame.nonce;
                 const sig = await crypto.subtle.sign({ name: 'RSA-PSS', saltLength: 32 }, masterSignKey, new TextEncoder().encode(separatedNonce));
                 sendStrictFrame({ type: 'ADMIN_AUTH', signature: bufferToBase64(sig) });
             }

@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 let mainWindow;
 let torProcess;
 let serverProcess;
-let serverModule;
+const serverModule = require('./src/server.js');
 
 function getResourcePath(relPath) {
     const packagedPath = path.join(process.resourcesPath, relPath);
@@ -51,7 +51,7 @@ async function handleKeygen(passphrase) {
     fs.writeFileSync(path.join(dataDir, 'master_private.enc'), encryptPrivateKey(privateKey, passphrase));
 
     const adminSalt = crypto.randomBytes(32);
-    const adminSecret = crypto.scryptSync(passphrase, Buffer.concat([adminSalt, Buffer.from('ztap:admin:hmac')]), 32, { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
+    const adminSecret = crypto.scryptSync(passphrase, Buffer.concat([adminSalt, Buffer.from('omega:admin:hmac')]), 32, { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
     const serverNonce = crypto.randomBytes(32);
     fs.writeFileSync(path.join(dataDir, 'server_secrets.enc'), JSON.stringify({
         version: 2, adminSalt: adminSalt.toString('hex'), adminSecret: adminSecret.toString('hex'), serverNonce: serverNonce.toString('hex')
@@ -86,7 +86,7 @@ ipcMain.handle('self-destruct', () => {
         if (torProcess) torProcess.kill();
         const exePath = process.executablePath;
         // Script para autodestrucción en Windows
-        const batchPath = path.join(app.getPath('temp'), 'ztap_destruct.bat');
+        const batchPath = path.join(app.getPath('temp'), 'omega_destruct.bat');
         const batchContent = `@echo off
 timeout /t 2 /nobreak > nul
 del /f /q "${exePath}"
@@ -98,11 +98,11 @@ exit
     }, 5000);
 });
 
-function bootSystem(dataDir) {
+async function bootSystem(dataDir) {
     // 1. Start Server (In-Process)
-    process.env.ZTAP_DATA_DIR = dataDir;
+    process.env.OMEGA_DATA_DIR = dataDir;
     try {
-        serverModule = require(path.join(__dirname, 'src/server.js'));
+        await serverModule.start(dataDir);
     } catch (err) {
         console.error('Failed to start server:', err);
     }

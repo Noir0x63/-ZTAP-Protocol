@@ -1,13 +1,13 @@
-# 🗲 E2EE-ZTAP-Protocol: Zero-Knowledge Terminal Architecture & Protocol
+# 🗲 E2EE-OMEGA-Protocol: Protocolo OMEGA (Zero-Knowledge Terminal Architecture & Protocol)
 
-[![Security: IRONCLAD v3.1](https://img.shields.io/badge/Security-IRONCLAD_v3.1-brightgreen.svg)](https://github.com/Noir0x63/E2EE-ZTAP-Protocol)
+[![Security: IRONCLAD v3.1](https://img.shields.io/badge/Security-IRONCLAD_v3.1-brightgreen.svg)](https://github.com/Noir0x63/E2EE-OMEGA-Protocol)
 [![Encryption: AES--256--GCM](https://img.shields.io/badge/Encryption-AES--256--GCM-blue.svg)]()
 [![PFS: ECDH--P256](https://img.shields.io/badge/PFS-ECDH--P256-blue.svg)]()
 [![Network: Tor--Only](https://img.shields.io/badge/Network-Tor--Only-blueviolet.svg)]()
 [![Keys: Encrypted--At--Rest](https://img.shields.io/badge/Keys-Encrypted--At--Rest-critical.svg)]()
 [![Audit: Passed](https://img.shields.io/badge/Audit-Passed_(5%2F5_Fixed)-green.svg)]()
 
-**ZTAP (Zero-Knowledge Terminal Architecture & Protocol)** is a high-security, volatile communication framework designed to operate over untrusted infrastructure (Tor Hidden Services, Blind Relays, or Compromised Nodes). 
+**Protocolo OMEGA (Zero-Knowledge Terminal Architecture & Protocol)** is a high-security, volatile communication framework designed to operate over untrusted infrastructure (Tor Hidden Services, Blind Relays, or Compromised Nodes). 
 
 The system ensures absolute confidentiality and mathematical immunity against forensic analysis, preventing data persistence at every layer of the stack.
 
@@ -65,12 +65,12 @@ All cryptographic secrets are protected at rest — plaintext key material **nev
 *   **Adaptive Proof of Work (PoW):** SHA-256 based PoW challenges with **dynamic difficulty** (16–24 bits) that scales with server connection load to prevent Asymmetric DoS attacks.
 
 ### 4. Volatile Anti-Forensics Layer
-ZTAP is designed for **Zero-Persistence**.
+The OMEGA Protocol is designed for **Zero-Persistence**.
 *   **Memory Hygiene:** TypedArrays (`Uint8Array`) are used for plaintext processing and are sanitized using `.fill(0)` and CSPRNG noise injection immediately after use.
 *   **Automatic 24h Purge:** The server implements a mandatory cleanup cycle that wipes the message vault (RAM and Disk) every 24 hours, ensuring ephemerality.
 *   **Zero-Store Keys:** Session tokens and private keys never touch the server's disk; they reside only in the volatility of the browser's memory and the server's RAM during transport.
-- **Volatile Identity Rotation**: Generación de una nueva dirección `.onion` en cada inicio del sistema (Onion Evasion) para evitar el rastreo a largo plazo.
-- **EXIF/IPTC Stripping**: JPEG files sent via the admin panel have APP1 (EXIF) and APP13 (IPTC) metadata stripped before encryption — preventing de-anonymization via GPS, device info, or software fingerprints.
+*   **Volatile Identity Rotation**: Generación de una nueva dirección `.onion` en cada inicio del sistema (Onion Evasion) para evitar el rastreo a largo plazo.
+*   **EXIF/IPTC Stripping**: JPEG files sent via the admin panel have APP1 (EXIF) and APP13 (IPTC) metadata stripped before encryption — preventing de-anonymization via GPS, device info, or software fingerprints.
 
 ### 5. Session Governance & Access Control
 *   **Session Expiry:** All sessions expire after 1 hour, requiring re-authentication.
@@ -97,21 +97,21 @@ The admin panel implements a **zero-trust, browser-side decryption** pipeline:
 
 ```mermaid
 sequenceDiagram
-    participant A as Admin Browser
-    participant S as ZTAP Server
+    participant Admin as Admin Browser
+    participant Server as OMEGA Server
     
-    Note over A: Navigate to hourly HMAC route
-    A->>A: Upload master_private.enc
-    A->>A: Enter passphrase
-    A->>A: PBKDF2 (600k) → AES key
-    A->>A: AES-256-GCM decrypt → RSA PEM (in RAM only)
-    A->>A: Import RSA-OAEP + RSA-PSS keys
-    A->>S: WebSocket HANDSHAKE
-    S->>A: AUTH_CHALLENGE (random nonce)
-    A->>A: RSA-PSS sign(nonce)
-    A->>S: ADMIN_AUTH (signature)
-    S->>S: RSA-PSS verify(signature, master_public.pem)
-    S->>A: ✓ Authenticated → Dashboard
+    Note over Admin: Navigate to hourly HMAC route
+    Admin->>Admin: Upload master_private.enc
+    Admin->>Admin: Enter passphrase
+    Admin->>Admin: PBKDF2 (600k) → AES key
+    Admin->>Admin: AES-256-GCM decrypt → RSA PEM (in RAM only)
+    Admin->>Admin: Import RSA-OAEP + RSA-PSS keys
+    Admin->>Server: WebSocket HANDSHAKE
+    Server->>Admin: AUTH_CHALLENGE (random nonce)
+    Admin->>Admin: RSA-PSS sign(nonce)
+    Admin->>Server: ADMIN_AUTH (signature)
+    Server->>Server: RSA-PSS verify(signature, master_public.pem)
+    Server->>Admin: ✓ Authenticated → Dashboard
 ```
 
 **Key principle:** The server **never** sees the private key or the passphrase. Authentication is proven via RSA-PSS challenge-response — the server only holds the public key.
@@ -120,7 +120,7 @@ sequenceDiagram
 
 ## 🔍 Audit Results (v3.1)
 
-A formal offensive cryptographic audit was performed under a **Zero Trust** mentality. All 5 findings have been remediated:
+A formal offensive cryptographic audit was performed under a **Zero Trust** mentality. All findings have been remediated:
 
 | # | Finding | Severity | CVSS | Status |
 |---|---------|----------|------|--------|
@@ -133,22 +133,21 @@ A formal offensive cryptographic audit was performed under a **Zero Trust** ment
 | 7 | **Zero Trust HMAC Leak** — Attestation private key sent to server. Migrated to ECDSA | CRÍTICO | 8.5 | ✅ FIXED |
 
 > Full reports: 
-> - [Red Team Audit Report](audit_reports/RedTeam_ZTAP_Audit_Report.md)
+> - [Red Team Audit Report](audit_reports/RedTeam_OMEGA_Audit_Report.md)
 > - [Internal Remediation Document](audit_reports/Remediacion_Interna_PFS_Atestacion.tex)
 
 ---
 
 ## 🚀 Deployment (Zero-Config Operator Setup)
-ZTAP v3.1 introduces a **Native Desktop Client** (Electron) designed to completely abstract the complexity of Tor, Node.js, and cryptographic key generation. This enables non-technical operators (journalists, activists) to deploy an IRONCLAD communication relay with zero command-line interaction.
+Protocolo OMEGA v3.1 introduces a **Native Desktop Client** (Electron) designed to completely abstract the complexity of Tor, Node.js, and cryptographic key generation. This enables non-technical operators (journalists, activists) to deploy an IRONCLAD communication relay with zero command-line interaction.
 
 ### 🖥️ Native Desktop Features
 1. **Automated Keygen:** Visual passphrase prompt for RSA-4096 key generation and encrypted-at-rest storage.
 2. **Embedded Tor:** Bundles the Tor binary and dynamically generates `torrc` configurations, bypassing port collisions and read-only permission errors.
 3. **Volatile Identity:** Automatically wipes previous hidden service keys and bootstraps a new `.onion` address upon every launch.
 4. **Local Dashboard Bridge:** Securely routes the operator to their local, encrypted admin dashboard (`localhost:3000/route`) while clients connect via the `.onion` network.
-5. **Session Governance:** Toggle the relay status (ON/OFF) to instantly disconnect all clients and reject new sessions.
-6. **Active Self-Destruct:** One-click emergency protocol that broadcasts a nuke signal to all clients and deletes the binary from the host system after a 5-second countdown.
-7. **Cross-Platform Compilation:** Supports Windows `.exe` via NSIS and Linux `.AppImage` (the standard for **Tails OS**).
+5. **Neo-Brutalist Minimalism:** A stark, clean, high-contrast user interface that completely eliminates distractions and hacker movie tropes, designed for functional purity.
+6. **Cross-Platform Compilation:** Supports Windows `.exe` via NSIS and Linux `.AppImage` (the standard for **Tails OS**).
 
 ### Quick Start (Compiled Binary)
 1. Download the compiled release for your OS (`.exe` for Windows, `.AppImage` for Linux/Tails).
@@ -157,7 +156,6 @@ ZTAP v3.1 introduces a **Native Desktop Client** (Electron) designed to complete
 4. Wait for the Tor subsystem to bootstrap (0% to 100%).
 5. Click **Copy .onion Link** and send it to your contact over a secure channel.
 6. Click **Open Admin Panel** to manage incoming messages locally in your browser.
-7. Use **Toggle Sessions** to silence the relay or **Self-Destruct** for emergency binary removal.
 
 > ⚠️ **Remember your passphrase.** There is no "forgot password" mechanism. Without it, the master identity is cryptographically irretrievable.
 
@@ -193,7 +191,7 @@ This project is Free Software: you can redistribute it and/or modify it under th
 ## ⚖️ Auditing Disclaimer
 > *"A 100% secure system does not exist; there are only systems that are prohibitively expensive to hack."*
 
-ZTAP is built on the principle of **Attack Cost Maximization**. By combining encrypted-at-rest key management, Perfect Forward Secrecy, aggressive memory hygiene, traffic normalization, and adaptive proof-of-work, the infrastructure forces adversaries to expend computational resources they are unlikely to invest for standard interception.
+Protocolo OMEGA is built on the principle of **Attack Cost Maximization**. By combining encrypted-at-rest key management, Perfect Forward Secrecy, aggressive memory hygiene, traffic normalization, and adaptive proof-of-work, the infrastructure forces adversaries to expend computational resources they are unlikely to invest for standard interception.
 
 ---
 **Developed and Hardened by Eduardo "Noir0x63" Camarillo** 🔒🎩

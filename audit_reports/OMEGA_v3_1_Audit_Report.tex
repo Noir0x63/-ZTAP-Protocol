@@ -25,7 +25,7 @@
     xleftmargin=15pt
 }
 
-\title{\textbf{Offensive Cryptographic Audit Report}\\ \Large ZTAP Protocol v3.1 ``IRONCLAD''}
+\title{\textbf{Offensive Cryptographic Audit Report}\\ \Large OMEGA Protocol v3.1 ``IRONCLAD''}
 \author{Antigravity Red Team \and Primary Auditor: Elite Cryptographic Agent}
 \date{\today}
 
@@ -34,7 +34,7 @@
 \maketitle
 
 \begin{abstract}
-This document outlines the findings of a Zero-Trust, highly aggressive cryptographic audit performed on the ZTAP (Zero-Knowledge Terminal Architecture \& Protocol) v3.1 framework. The audit adopted an offensive Red Team methodology, assuming the presence of a persistent, capable adversary (e.g., a malicious Tor exit node or compromised infrastructure). While the architecture demonstrates an exceptional theoretical foundation, critical structural flaws were identified in the implementation of Forward Secrecy, state management, and entropy handling.
+This document outlines the findings of a Zero-Trust, highly aggressive cryptographic audit performed on the Protocolo OMEGA (Zero-Knowledge Terminal Architecture \& Protocol) v3.1 framework. The audit adopted an offensive Red Team methodology, assuming the presence of a persistent, capable adversary (e.g., a malicious Tor exit node or compromised infrastructure). While the architecture demonstrates an exceptional theoretical foundation, critical structural flaws were identified in the implementation of Forward Secrecy, state management, and entropy handling.
 \end{abstract}
 
 \section{Methodology \& Threat Model}
@@ -64,7 +64,7 @@ The protocol advertises Perfect Forward Secrecy via ephemeral Elliptic Curve Dif
 
 \textbf{Remediation (Diff Concept):}
 The ephemeral ECDH shared secret must be incorporated into the final symmetric key derivation material.
-\begin{lstlisting}[language=JavaScript, title=Conceptual Patch in ztap-worker.js]
+\begin{lstlisting}[language=JavaScript, title=Conceptual Patch in omega-worker.js]
 // Combine client token with network entropy (ECDH shared secret)
 const combinedMaterial = new Uint8Array(tokenBuf.length + ecdhSharedSecret.length);
 combinedMaterial.set(tokenBuf, 0);
@@ -104,13 +104,13 @@ const existing = users[sessId];
 \vspace{0.5cm}
 
 \textbf{Description:} 
-In \texttt{ztap-worker.js}, the session token and the \texttt{sessionId} are used to derive the final AES-GCM key via PBKDF2. The \texttt{sessionId} is a 32-byte hexadecimal string. However, instead of parsing the hex string back to binary, the code passes the string directly to \texttt{TextEncoder().encode()}.
+In \texttt{omega-worker.js}, the session token and the \texttt{sessionId} are used to derive the final AES-GCM key via PBKDF2. The \texttt{sessionId} is a 32-byte hexadecimal string. However, instead of parsing the hex string back to binary, the code passes the string directly to \texttt{TextEncoder().encode()}.
 
 \textbf{Exploitation Vector (PoC):}
 By encoding hex characters as ASCII/UTF-8 bytes (e.g., 'a' becomes \texttt{0x61}), each byte of the resulting salt only carries 4 bits of actual entropy instead of 8. A 32-character hex string encoded this way yields 32 bytes of memory usage but only 128 bits of actual mathematical entropy, severely weakening the KDF's resistance to optimized dictionary attacks on the client's local token generation.
 
 \textbf{Remediation (Diff Concept):}
-\begin{lstlisting}[language=JavaScript, title=ztap-worker.js Patch]
+\begin{lstlisting}[language=JavaScript, title=omega-worker.js Patch]
 // Revert string to raw binary before passing to PBKDF2
 - const saltBuf = enc.encode(salt);
 + const saltBuf = new Uint8Array(salt.match(/.{1,2}/g).map(b => parseInt(b, 16)));
@@ -139,6 +139,6 @@ The administrative routing URL rotates hourly based on an HMAC involving the cur
 Regenerate the \texttt{SERVER\_NONCE} dynamically alongside the 24-hour vault purge cycle.
 
 \section{Conclusion \& Directive}
-The ZTAP v3.1 protocol exhibits significant ambition, but the current implementation requires immediate restructuring to achieve its stated goals. The ``Placebo PFS'' vulnerability represents a critical structural failure. It is imperative to halt production deployment until the ECDH shared secret is cryptographically bound to the E2EE key derivation pipeline and the initialization replay vectors are sealed.
+The OMEGA Protocol v3.1 exhibits significant ambition, but the current implementation requires immediate restructuring to achieve its stated goals. The ``Placebo PFS'' vulnerability represents a critical structural failure. It is imperative to halt production deployment until the ECDH shared secret is cryptographically bound to the E2EE key derivation pipeline and the initialization replay vectors are sealed.
 
 \end{document}

@@ -73,7 +73,7 @@
 
 % --- Document Metadata ---
 \hypersetup{
-    pdftitle={ZTAP VULN-03 Audit Report — Blind Signing Oracle},
+    pdftitle={OMEGA VULN-03 Audit Report — Blind Signing Oracle},
     pdfauthor={Eduardo Camarillo},
     colorlinks=true,
     linkcolor=blue,
@@ -82,7 +82,7 @@
 
 \title{
     \textbf{Internal Audit \& Remediation Report}\\[0.5em]
-    \Large ZTAP Protocol v3.1 IRONCLAD\\[0.3em]
+    \Large OMEGA Protocol v3.1 IRONCLAD\\[0.3em]
     \large \texttt{VULN-03: Blind Signing Oracle / Domain Separation Failure}\\[1em]
     \normalsize \textcolor{criticalred}{\textbf{SEVERITY: CRITICAL}} \quad
     \textcolor{safegreen}{\textbf{STATUS: MITIGATED}}
@@ -90,7 +90,7 @@
 \author{
     Eduardo ``Noir0x63'' Camarillo\\
     \small Internal Red Team Security Auditor\\
-    \small \texttt{ZTAP Zero-Trust Architecture Protocol}
+    \small \texttt{OMEGA Zero-Trust Architecture Protocol}
 }
 \date{May 2, 2026}
 
@@ -103,7 +103,7 @@
 \vspace{1em}
 
 \begin{abstract}
-This document constitutes a formal internal security audit report for the ZTAP (Zero-Trust Architecture Protocol) v3.1, specifically addressing the critical vulnerability designated \textbf{VULN-03}: the \textit{Blind Signing Oracle} arising from the absence of Domain Separation in the administrator authentication mechanism. The report documents in full technical detail the identification of the flaw, its cryptographic attack surface, the proposed remediation strategy, the implementation of the Domain Separation patch across the affected modules (\texttt{admin-client.js} and \texttt{server.js}), and the subsequent re-audit verification confirming full mitigation. Additionally, three residual risk findings identified during the re-audit are disclosed and classified.
+This document constitutes a formal internal security audit report for the Protocolo OMEGA (Zero-Trust Architecture Protocol) v3.1, specifically addressing the critical vulnerability designated \textbf{VULN-03}: the \textit{Blind Signing Oracle} arising from the absence of Domain Separation in the administrator authentication mechanism. The report documents in full technical detail the identification of the flaw, its cryptographic attack surface, the proposed remediation strategy, the implementation of the Domain Separation patch across the affected modules (\texttt{admin-client.js} and \texttt{server.js}), and the subsequent re-audit verification confirming full mitigation. Additionally, three residual risk findings identified during the re-audit are disclosed and classified.
 \end{abstract}
 
 \tableofcontents
@@ -113,7 +113,7 @@ This document constitutes a formal internal security audit report for the ZTAP (
 \section{Introduction and Scope}
 % =========================================================
 
-During the second phase of the internal Red Team security audit of the ZTAP v3.1 protocol---conducted after the successful remediation of VULN-01 (Fake PFS) and VULN-02 (HMAC Key Leakage)---a critical structural flaw was identified in the administrator authentication flow. Unlike the previous vulnerabilities, which resided in the symmetric cryptographic layer, VULN-03 was a \textit{protocol-level design flaw} affecting the asymmetric authentication handshake used to grant privileged administrative access to the ZTAP server.
+During the second phase of the internal Red Team security audit of the Protocolo OMEGA v3.1---conducted after the successful remediation of VULN-01 (Fake PFS) and VULN-02 (HMAC Key Leakage)---a critical structural flaw was identified in the administrator authentication flow. Unlike the previous vulnerabilities, which resided in the symmetric cryptographic layer, VULN-03 was a \textit{protocol-level design flaw} affecting the asymmetric authentication handshake used to grant privileged administrative access to the OMEGA server.
 
 \subsection{Affected Components}
 
@@ -191,7 +191,7 @@ A \textit{signing oracle} in cryptographic terms is a system that will sign arbi
 Consider the following scenario:
 
 \begin{enumerate}
-    \item ZTAP is expanded in the future to include an additional signed operation, for example, a \texttt{NUKE\_AUTH} command requiring the admin to sign a payload to authorize a full vault purge. The server generates a payload with a nonce such as \texttt{a3f9...}. 
+    \item OMEGA is expanded in the future to include an additional signed operation, for example, a \texttt{NUKE\_AUTH} command requiring the admin to sign a payload to authorize a full vault purge. The server generates a payload with a nonce such as \texttt{a3f9...}. 
     
     \item An attacker who has compromised the WebSocket transport layer (via a rogue WebSocket proxy or a BGP hijack redirecting traffic to a malicious server) intercepts the connection just before the \texttt{NUKE\_AUTH} challenge and replaces it with an \texttt{AUTH\_CHALLENGE} frame containing the same nonce \texttt{a3f9...}.
     
@@ -232,14 +232,14 @@ Domain Separation is a foundational hardening technique in modern cryptographic 
 \textit{For a given cryptographic key $K$ used for purpose $P$, all messages signed or encrypted under $K$ for purpose $P$ must be structurally distinguishable from messages signed for any other purpose $P'$, $P \neq P'$, such that a valid signature under $K$ for purpose $P$ cannot be interpreted as a valid signature for purpose $P'$.}
 \end{quote}
 
-The standard implementation technique is \textbf{domain prefix injection}: prepend a unique, fixed, and purpose-specific string to every message before it is passed to the cryptographic primitive. This is exactly the approach employed in the ZTAP patch.
+The standard implementation technique is \textbf{domain prefix injection}: prepend a unique, fixed, and purpose-specific string to every message before it is passed to the cryptographic primitive. This is exactly the approach employed in the OMEGA patch.
 
 \subsection{The Remediation Strategy}
 
-The remediation introduces a mandatory, fixed domain prefix \texttt{ZTAP\_ADMIN\_AUTH:} that is prepended to the raw nonce before signing on the client side, and before verification on the server side. This ensures:
+The remediation introduces a mandatory, fixed domain prefix \texttt{OMEGA\_ADMIN_AUTH:} that is prepended to the raw nonce before signing on the client side, and before verification on the server side. This ensures:
 
 \begin{itemize}
-    \item \textbf{Unforgeability across contexts:} A signature over \texttt{ZTAP\_ADMIN\_AUTH:}<nonce> is provably worthless for any other protocol operation because no other operation will verify against a payload beginning with that prefix.
+    \item \textbf{Unforgeability across contexts:} A signature over \texttt{OMEGA\_ADMIN\_AUTH:}<nonce> is provably worthless for any other protocol operation because no other operation will verify against a payload beginning with that prefix.
     \item \textbf{Symmetric enforcement:} Because the server applies the \textit{same} prefix to the stored nonce before calling \texttt{crypto.verify()}, a non-prefixed signature will \textit{always} fail verification---even a legitimate one---providing defense-in-depth against the case where the client is somehow tricked into sending a raw signature.
     \item \textbf{Zero additional cryptographic cost:} The RSA-PSS operation itself is unchanged. No key rotation, no new algorithms, no protocol handshake modifications required.
 \end{itemize}
@@ -256,10 +256,10 @@ The modification is surgical: one line is added to construct the domain-separate
 if (frame.type === 'AUTH_CHALLENGE') {
     // PATCH VULN-03: Domain Separation (Prevents Blind Signing Oracle).
     // The raw nonce is NEVER signed directly. It is always prefixed with
-    // 'ZTAP_ADMIN_AUTH:' to bind the signature strictly to this context.
+    // 'OMEGA_ADMIN_AUTH:' to bind the signature strictly to this context.
     // A signature over this prefixed payload is cryptographically inert
     // in any other protocol context, neutralizing type confusion attacks.
-    const separatedNonce = 'ZTAP_ADMIN_AUTH:' + frame.nonce;
+    const separatedNonce = 'OMEGA_ADMIN_AUTH:' + frame.nonce;
     const sig = await crypto.subtle.sign(
         { name: 'RSA-PSS', saltLength: 32 },
         masterSignKey,
@@ -285,7 +285,7 @@ if (data.type === 'ADMIN_AUTH') {
         // The server reconstructs the same prefixed domain string that the
         // legitimate client signs. A raw signature (no prefix) will ALWAYS
         // fail this verification, providing defense-in-depth.
-        const separatedNonce = 'ZTAP_ADMIN_AUTH:' + stored.nonce;
+        const separatedNonce = 'OMEGA_ADMIN_AUTH:' + stored.nonce;
         const isValid = crypto.verify(
             'sha256',
             Buffer.from(separatedNonce), // Prefixed domain
@@ -313,7 +313,7 @@ if (data.type === 'ADMIN_AUTH') {
 
 \subsection{Correctness Proof by Symmetry}
 
-Let $N$ be the raw nonce generated by the server, $D$ the domain prefix string \texttt{"ZTAP\_ADMIN\_AUTH:"}, $K_{priv}$ the administrator's master RSA private key, and $K_{pub}$ the corresponding master RSA public key stored on the server.
+Let $N$ be the raw nonce generated by the server, $D$ the domain prefix string \texttt{"OMEGA\_ADMIN\_AUTH:"}, $K_{priv}$ the administrator's master RSA private key, and $K_{pub}$ the corresponding master RSA public key stored on the server.
 
 \begin{itemize}
     \item \textbf{Signing (client):} $\sigma = \text{RSA-PSS-Sign}_{K_{priv}}(D \| N)$
@@ -336,8 +336,8 @@ Post-patch code review confirmed exact textual and semantic symmetry between the
 \toprule
 \textbf{Component} & \textbf{Signed/Verified Payload} & \textbf{Status} \\
 \midrule
-\texttt{admin-client.js} L181 & \texttt{'ZTAP\_ADMIN\_AUTH:' + frame.nonce} & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
-\texttt{server.js} L361--L362 & \texttt{'ZTAP\_ADMIN\_AUTH:' + stored.nonce} & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+\texttt{admin-client.js} L181 & \texttt{'OMEGA\_ADMIN\_AUTH:' + frame.nonce} & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+\texttt{server.js} L361--L362 & \texttt{'OMEGA\_ADMIN\_AUTH:' + stored.nonce} & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
 \bottomrule
 \end{tabularx}
 \caption{Symmetric Domain Separation verification across client and server}
@@ -349,23 +349,23 @@ The prefix is \textbf{identical} on both sides and \textbf{hardcoded}---it canno
 
 The re-audit identified three additional low-severity findings which do not constitute exploitable vulnerabilities in the current deployment model but represent deviations from cryptographic hygiene best practices.
 
-\subsubsection{Finding-R1: Zero-Salt Fallback in HKDF (ztap-worker.js, L42)}
+\subsubsection{Finding-R1: Zero-Salt Fallback in HKDF (omega-worker.js, L42)}
 
 \begin{warningbox}
 \textbf{Severity: LOW | Risk: Latent Regression}\\
 The HKDF stage of \texttt{deriveKey()} contains a fallback branch that assigns a 32-byte zero salt if \texttt{ecdhSecret} is null: \texttt{new Uint8Array(32)}. This branch is unreachable in the current codebase because the hard-fail guard at L110 will terminate the Worker first. However, if the guard is ever removed or refactored, this branch silently degrades PFS to a static zero-salt derivation. The comment \textit{``degradación segura''} (safe degradation) is semantically incorrect and should be replaced with a hard error. \textbf{Recommended action:} Remove the fallback branch entirely and throw an explicit error.
 \end{warningbox}
 
-\subsubsection{Finding-R2: Attestation Blind Signing in Worker (ztap-worker.js, L145)}
+\subsubsection{Finding-R2: Attestation Blind Signing in Worker (omega-worker.js, L145)}
 
 \begin{warningbox}
 \textbf{Severity: LOW | Risk: Theoretical (Ephemeral Key)}\\
-The client-side attestation response in \texttt{ztap-worker.js} signs the raw ECDSA challenge without a domain prefix:
+The client-side attestation response in \texttt{omega-worker.js} signs the raw ECDSA challenge without a domain prefix:
 \begin{lstlisting}[language=JavaScript, numbers=none]
 const challengeBuf = new TextEncoder().encode(d.challenge); // No prefix
 const sig = await crypto.subtle.sign({ name: 'ECDSA', ... }, attestSignKey, challengeBuf);
 \end{lstlisting}
-The practical risk is negligible because the ECDSA attestation key is ephemeral (non-extractable, destroyed when the Worker is terminated). However, this violates the Domain Separation principle applied elsewhere. \textbf{Recommended action:} Add prefix \texttt{ZTAP\_CLIENT\_ATTEST:} before signing.
+The practical risk is negligible because the ECDSA attestation key is ephemeral (non-extractable, destroyed when the Worker is terminated). However, this violates the Domain Separation principle applied elsewhere. \textbf{Recommended action:} Add prefix \texttt{OMEGA\_CLIENT\_ATTEST:} before signing.
 \end{warningbox}
 
 \subsubsection{Finding-R3: Nonce Input Validation Absent in Admin Client (admin-client.js, L180)}
@@ -374,7 +374,7 @@ The practical risk is negligible because the ECDSA attestation key is ephemeral 
 \textbf{Severity: LOW | Risk: DoS on Admin Client}\\
 After applying the Domain Separation patch, the admin client constructs the signing payload as:
 \begin{lstlisting}[language=JavaScript, numbers=none]
-const separatedNonce = 'ZTAP_ADMIN_AUTH:' + frame.nonce;
+const separatedNonce = 'OMEGA_ADMIN_AUTH:' + frame.nonce;
 \end{lstlisting}
 No validation is performed on \texttt{frame.nonce} prior to concatenation. A compromised server could send a nonce of arbitrary length (e.g., several megabytes), causing the \texttt{TextEncoder + RSA-PSS} pipeline to consume excessive memory in the admin's browser tab, effectively constituting a Denial of Service. \textbf{Recommended action:} Add type and length validation: \texttt{if (typeof frame.nonce !== 'string' || frame.nonce.length !== 64) return;}.
 \end{warningbox}
@@ -406,9 +406,9 @@ Finding-R3 & Low & Admin nonce input not validated pre-signing & \textcolor{warn
 
 The VULN-03 Blind Signing Oracle vulnerability has been fully and correctly remediated through the implementation of Domain Separation in the administrator authentication handshake. The patch is minimal in scope, correct by mathematical proof, and introduces zero protocol-breaking changes.
 
-The three residual findings (R1, R2, R3) identified during the re-audit represent low-risk deviations from cryptographic best practice rather than immediately exploitable vulnerabilities. They should be addressed in the next patch cycle to bring the ZTAP v3.1 codebase to a state of complete cryptographic hygiene.
+The three residual findings (R1, R2, R3) identified during the re-audit represent low-risk deviations from cryptographic best practice rather than immediately exploitable vulnerabilities. They should be addressed in the next patch cycle to bring the OMEGA v3.1 codebase to a state of complete cryptographic hygiene.
 
-With the mitigation of VULN-01, VULN-02, and VULN-03, the ZTAP protocol's core security architecture satisfies the following Zero Trust properties:
+With the mitigation of VULN-01, VULN-02, and VULN-03, the OMEGA protocol's core security architecture satisfies the following Zero Trust properties:
 
 \begin{itemize}
     \item \textbf{True Perfect Forward Secrecy:} Every session key is cryptographically bound to an ephemeral ECDH shared secret. Compromise of the master key does not retroactively expose session traffic.
@@ -420,7 +420,7 @@ With the mitigation of VULN-01, VULN-02, and VULN-03, the ZTAP protocol's core s
 \hrule
 \vspace{1em}
 \noindent\textbf{Auditor:} Eduardo ``Noir0x63'' Camarillo\\
-\textbf{Protocol:} ZTAP Zero-Trust Architecture Protocol v3.1 IRONCLAD\\
+\textbf{Protocol:} Protocolo OMEGA (Zero-Trust Architecture Protocol) v3.1 IRONCLAD\\
 \textbf{Audit Type:} Internal Red Team Review — Cycle 3\\
 \textbf{Date:} May 2, 2026\\
 \textbf{Next Review:} Upon implementation of Findings R1, R2, R3

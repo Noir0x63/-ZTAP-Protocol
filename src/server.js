@@ -12,7 +12,7 @@ let adminSocket = null;
 const activeSessionIds = new Set();
 let RELAY_ENABLED = true;
 
-let dataDir = process.env.ZTAP_DATA_DIR || path.join(__dirname, '..');
+let dataDir = process.env.OMEGA_DATA_DIR || path.join(__dirname, '..');
 let VAULT_FILE = path.join(dataDir, 'vault.json');
 const MAX_VAULT_SIZE = 5000;
 const CHALLENGE_TTL = 30000;
@@ -382,7 +382,7 @@ wss.on('connection', (ws) => {
                     // legitimate admin client signs. Any raw (un-prefixed) signature
                     // will ALWAYS fail this verification — even a cryptographically
                     // valid one — providing symmetric defense-in-depth against oracle abuse.
-                    const separatedNonce = 'ZTAP_ADMIN_AUTH:' + stored.nonce;
+                    const separatedNonce = 'OMEGA_ADMIN_AUTH:' + stored.nonce;
                     const isValid = crypto.verify('sha256', Buffer.from(separatedNonce), {
                         key: pubKey,
                         padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
@@ -574,7 +574,7 @@ module.exports = {
     start: async (dir) => {
         await initSecrets(dir);
         server.listen(process.env.PORT || 3000);
-        console.log('[SERVER] ZTAP Secure Relay started.');
+        console.log('[SERVER] OMEGA Secure Relay started.');
     },
     setRelayStatus: (status) => { 
         RELAY_ENABLED = status;

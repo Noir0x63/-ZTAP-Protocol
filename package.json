@@ -1,17 +1,17 @@
 {
-  "name": "ztap-terminal",
+  "name": "omega-terminal",
   "version": "3.1.0",
   "private": false,
   "license": "GPL-3.0-only",
-  "description": "ZTAP Encrypted Ephemeral Relay — Zero-Knowledge Terminal",
+  "description": "Protocolo OMEGA Encrypted Ephemeral Relay — Zero-Knowledge Terminal",
   "main": "electron-main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.noir0x63.ztap",
-    "productName": "ZTAP Terminal",
+    "appId": "com.noir0x63.omega",
+    "productName": "Protocolo OMEGA Terminal",
     "directories": {
       "output": "dist"
     },

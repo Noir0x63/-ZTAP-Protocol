@@ -1,0 +1,101 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{titlesec}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{amssymb}
+
+\titleformat{\section}{\large\bfseries\color{black}}{\thesection}{1em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries\color{darkgray}}{\thesubsection}{1em}{}
+
+\title{\textbf{Auditoría de Seguridad Ofensiva y Análisis de Arquitectura Criptográfica}\\
+\large Protocolo E2EE-OMEGA v3.1}
+\author{Eduardo ``Noir0x63'' Camarillo\\
+\textit{Investigador de Vulnerabilidades y Criptografía Aplicada}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+El presente documento expone los resultados de un escrutinio técnico implacable sobre la canalización criptográfica y la arquitectura de aislamiento del Protocolo E2EE-OMEGA v3.1. Bajo una postura de confianza cero (Zero Trust) y asumiendo un modelo de amenaza de nivel Estado-Nación, el análisis secuencial estricto reveló fallas estructurales críticas que comprometen las garantías de Secreto Hacia Adelante (Perfect Forward Secrecy), la integridad de la atestación de clientes y la disponibilidad asimétrica del sistema. 
+\end{abstract}
+
+\section{Metodología de Evaluación}
+La auditoría se ejecutó mediante un análisis algorítmico y matemático sobre las rutinas de WebCrypto API y la máquina virtual V8. No se admitieron axiomas ni supuestos de seguridad operacionales que no estuvieran matemáticamente respaldados por el código fuente. Se priorizó la búsqueda de colisiones entrópicas, fugas de canales laterales y degradación silenciosa de primitivas.
+
+\section{Hallazgo I: Falso Secreto Hacia Adelante (PFS Theater) por Fuga de Entropía Efímera}
+\textbf{Severidad:} CRÍTICA (CVSS: 9.1)\\
+\textbf{Módulo Afectado:} \texttt{src/omega-worker.js} y \texttt{src/admin-client.js}
+
+\subsection{Descripción del Vector de Ataque}
+La arquitectura ostenta proporcionar Secreto Hacia Adelante mediante la inclusión de una Función de Derivación de Claves (KDF) de dos etapas (PBKDF2 iterado seguido de HKDF) con una semilla ECDH efímera. Sin embargo, la implementación traiciona esta premisa al realizar el intercambio ECDH contra el servidor, para luego encapsular el secreto resultante (\texttt{ecdhSecret}) dentro del payload \texttt{INIT}, el cual es cifrado con la llave pública RSA estática del administrador.
+
+Este diseño muta una arquitectura PFS en un esquema clásico de transporte de claves (Key Transport) vulnerable a captura forense. Si un adversario intercepta el tráfico enrutado sobre Tor y en el futuro logra comprometer la clave RSA-4096 del operador, el atacante podrá descifrar el paquete \texttt{INIT}, extraer tanto el token determinista como el supuesto secreto efímero, y re-derivar retroactivamente las claves de sesión AES-256-GCM, comprometiendo todo el historial de la sesión.
+
+\subsection{Plan de Remediación}
+Desacoplar el rol de intercambio criptográfico del servidor Node.js. El intercambio de llaves efímeras de la curva P-256 debe orquestarse directamente de extremo a extremo (E2E) entre el cliente y el administrador. El servidor actuará como un relé ciego, operando sin visibilidad sobre el material criptográfico efímero, asegurando que las llaves nunca persistan ni sean envueltas por criptografía asimétrica estática.
+
+\section{Hallazgo II: Spoofing Trivial de Atestación de Integridad}
+\textbf{Severidad:} ALTA (CVSS: 8.2)\\
+\textbf{Módulo Afectado:} \texttt{src/server.js} (Validación de \texttt{ATTEST\_RESPONSE})
+
+\subsection{Descripción del Vector de Ataque}
+El servidor busca garantizar que el cliente ejecuta código no modificado emitiendo desafíos criptográficos (\texttt{ATTEST\_CHALLENGE}) a firmar con ECDSA. La debilidad sistémica yace en la ausencia de un ancla de confianza (Trust Anchor). El servidor acepta arbitrariamente la clave pública de atestación (\texttt{attestKey}) proporcionada por el cliente durante su inicialización. Un agente malicioso puede inyectar su propio par de claves asimétricas en la memoria y firmar exitosamente los desafíos, engañando al servidor y eludiendo por completo la garantía de integridad operacional.
+
+\subsection{Plan de Remediación}
+La atestación por software puro en entornos interpretados es inherentemente falible frente a clientes maliciosos. Se recomienda descontinuar este mecanismo para reducir la superficie de ataque o migrar a una arquitectura de atestación respaldada por hardware mediante el estándar FIDO2/WebAuthn.
+
+\section{Hallazgo III: Denegación de Servicio (DoS) Asimétrica}
+\textbf{Severidad:} ALTA (CVSS: 7.5)\\
+\textbf{Módulo Afectado:} Lógica de control de sockets en \texttt{server.js}
+
+\subsection{Descripción del Vector de Ataque}
+La mitigación frente a ataques de red mediante Prueba de Trabajo Adaptativa (PoW) fue posicionada incorrectamente a nivel de aplicación, específicamente posterior a la negociación WebSocket (Upgrade) y controlada bajo el límite estricto de \texttt{MAX\_TOTAL\_CONN = 500}. Un atacante puede instanciar de forma paralela 500 conexiones HTTP y mantener los sockets abiertos hasta que expiren por el temporizador \texttt{HANDSHAKE\_TIMEOUT} (20 segundos). Esto ahoga el pool de conexiones del servidor asimétricamente, bloqueando el acceso al administrador sin incurrir en el costo computacional del PoW.
+
+\subsection{Plan de Remediación}
+Reubicar la barrera PoW a la fase de pre-autenticación. Se debe integrar un desafío criptográfico estático sobre las cabeceras de la petición HTTP antes de aprobar la transición del socket a WebSocket. Alternativamente, la configuración de \texttt{HiddenServicePoW} provista nativamente por Tor v3 es el estándar de oro para blindar el daemon de Node.js.
+
+\section{Hallazgo IV: Violación del Aislamiento Criptográfico en Memoria (V8 Heap)}
+\textbf{Severidad:} MEDIA (CVSS: 4.0)\\
+\textbf{Módulo Afectado:} Operaciones de descifrado DOM en clientes.
+
+\subsection{Descripción del Vector de Ataque}
+El requerimiento estricto de "Zero-Persistence" es quebrantado mecánicamente por el motor JavaScript subyacente. A pesar de los esfuerzos programáticos de sobrescribir memoria invocando \texttt{decBuf.fill(0)}, la decodificación de secuencias UTF-8 genera constructos de tipo \texttt{String} que son alojados de manera inmutable en la memoria Heap. Estos fragmentos en texto plano sobreviven indefinidamente hasta que el Garbage Collector interviene, haciéndolos susceptibles a exfiltración forense o de intercambio de páginas (Swap) a disco físico.
+
+\subsection{Plan de Remediación}
+Asumir la limitación estructural de las arquitecturas web. Se requiere la supresión técnica de la memoria virtual (Swap) en el entorno host del administrador e implementación de manipulación pura sobre \texttt{TypedArrays} para minimizar ventanas de exposición en RAM.
+
+\section{Hallazgo V: Reutilización de Primitivas RSA (Confusión de Dominio)}
+\textbf{Severidad:} MEDIA (CVSS: 5.8)\\
+\textbf{Módulo Afectado:} \texttt{src/admin-client.js} (L24-L25) e importación de llaves.
+
+\subsection{Descripción del Vector de Ataque}
+El sistema importa y utiliza el mismo par de claves RSA-4096 para dos propósitos criptográficos divergentes: cifrado asimétrico (\texttt{RSA-OAEP}) y firma digital (\texttt{RSA-PSS}). Aunque los esquemas modernos de relleno (padding) como OAEP y PSS están diseñados para ser robustos frente a colisiones, la reutilización de material clave es una violación de los principios de diseño de protocolos seguros. 
+
+En un escenario de ataque de confusión de protocolo, un adversario podría intentar forzar al administrador a firmar un mensaje que, bajo otra interpretación, sea un bloque de datos válido para el esquema de cifrado. Esto reduce la "defensa en profundidad" y expone al sistema a ataques de oráculo si alguna de las implementaciones de la WebCrypto API presentara debilidades en el aislamiento de contextos de uso.
+
+\subsection{Plan de Remediación}
+Segregar las identidades criptográficas. Se deben generar y mantener dos pares de llaves RSA independientes: una llave de \textit{Identity/Signing} (PSS) para la autenticación del administrador y una llave de \textit{Exchange/Encryption} (OAEP) exclusivamente para el desempaquetado de secretos de sesión.
+
+\section{Conclusión}
+El Protocolo E2EE-OMEGA demuestra un entendimiento sofisticado de defensas contra el análisis de tráfico y encapsulamiento. Sin embargo, en el dominio de las arquitecturas "Zero Trust", el diablo reside en las transiciones de estado y el aislamiento de primitivas. La transmisión de entropía efímera bajo envolturas asimétricas estáticas y la reutilización de claves RSA destruyen las propiedades de negabilidad y secreto hacia adelante.
+
+La implementación rigurosa de las remediaciones delineadas en este informe, especialmente la transición hacia un modelo de intercambio de llaves puramente efímero y segregado, es el único camino viable para estabilizar las garantías criptográficas frente a adversarios informados y persistentes.
+
+\vspace{2cm}
+\begin{flushright}
+\textbf{Eduardo ``Noir0x63'' Camarillo}\\
+\textit{Firma Electrónica Autorizada}\\
+Auditor Principal, Investigador Zero-Day
+\end{flushright}
+
+\end{document}

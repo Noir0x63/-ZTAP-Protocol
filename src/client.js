@@ -118,7 +118,7 @@ async function computeECDHSharedSecret(serverPublicKeyHex) {
 function initWorker() {
     return new Promise(async (resolve, reject) => {
         try {
-            const response = await fetch('ztap-worker.js');
+            const response = await fetch('omega-worker.js');
             if (!response.ok) throw new Error('Failed to fetch cryptographic engine');
             const arrayBuffer = await response.arrayBuffer();
 

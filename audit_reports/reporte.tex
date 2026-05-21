@@ -17,12 +17,12 @@
 \maketitle
 
 \section{Introducción}
-El presente reporte detalla la evaluación estricta de seguridad bajo una mentalidad de \textbf{Zero Trust} sobre el protocolo ZTAP (Zero-Knowledge Terminal Architecture \& Protocol). Se analizaron las implementaciones del cifrado \textit{End-to-End} (E2EE), el intercambio de claves, las políticas de persistencia, controles de acceso, y mecanismos de atestación del sistema.
+El presente reporte detalla la evaluación estricta de seguridad bajo una mentalidad de \textbf{Zero Trust} sobre el Protocolo OMEGA (Omega Protocol). Se analizaron las implementaciones del cifrado \textit{End-to-End} (E2EE), el intercambio de claves, las políticas de persistencia, controles de acceso, y mecanismos de atestación del sistema.
 
 El sistema evaluado opera como un relevo ciego (Blind Relay) sobre un Hidden Service de Tor, y emplea algoritmos de la WebCrypto API para aislar el proceso criptográfico de ataques de \textit{Supply Chain}.
 
 \section{Descripción General del Protocolo}
-El protocolo de ZTAP se orquesta en una topología E2EE donde el servidor Express.js/Node.js actúa como nodo de conmutación.
+El Protocolo OMEGA se orquesta en una topología E2EE donde el servidor Express.js/Node.js actúa como nodo de conmutación.
 \begin{itemize}
     \item \textbf{Cifrado Simétrico}: Los mensajes se cifran en AES-256-GCM.
     \item \textbf{Derivación de Claves}: PBKDF2 se utiliza para transformar material entrópico (token y sal) en material criptográfico simétrico.
@@ -60,9 +60,9 @@ const initObj = { type: 'INIT', user: username, data: data.payload };
 \textbf{VULNERABILIDAD DESCUBIERTA}: Las funciones \texttt{deriveKey} y \texttt{deriveAttestKey} usaban el \texttt{username} (datos de baja entropía y controlables por el usuario) como \textit{salt} para derivar las claves. Esto debilita severamente el PBKDF2 contra precomputación o ataques de diccionario (Rainbow tables).\\
 \textbf{VECTOR DE EXPLOTACIÓN}: Un atacante extrae el token del flujo comprometido o un volcado y ataca el PBKDF2 precalculado, ya que el username es comúnmente predecible.\\
 \textbf{IMPACTO}: CVSS 7.4. Posible compromiso a mediano/largo plazo de Confidencialidad.\\
-\textbf{EL PARCHE}: Se modificó \texttt{ztap-worker.js} y el flujo del cliente para usar \texttt{sessionId} (32 bytes Hex de alta entropía) como el Salt.
+\textbf{EL PARCHE}: Se modificó \texttt{omega-worker.js} y el flujo del cliente para usar \texttt{sessionId} (32 bytes Hex de alta entropía) como el Salt.
 \begin{lstlisting}[language=JavaScript]
-// ztap-worker.js
+// omega-worker.js
 localKey = await deriveKey(d.token, d.sessionId);
 \end{lstlisting}
 \textbf{JUSTIFICACIÓN}: Al atar el salt al ID criptográfico de la sesión (\texttt{sessionId}), cada derivación es completamente ortogonal, incrementando el esfuerzo requerido para ataques Offline a límites de inviabilidad.

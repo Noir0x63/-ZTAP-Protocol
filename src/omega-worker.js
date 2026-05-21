@@ -45,7 +45,7 @@ async function deriveKey(token, salt, ecdhSecret) {
         {
             name: 'HKDF',
             salt: hkdfSalt,
-            info: new TextEncoder().encode('ztap-v3-msg-key'),
+            info: new TextEncoder().encode('omega-v3-msg-key'),
             hash: 'SHA-256'
         },
         hkdfBase,

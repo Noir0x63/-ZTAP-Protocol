@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title TERMINAL - ZTAP IRONCLAD
+title TERMINAL - OMEGA IRONCLAD
 cls
 
 echo ====================================================
-echo             TERMINAL - ZTAP PROTOCOL
+echo             TERMINAL - PROTOCOLO OMEGA
 echo              IRONCLAD v3.1 (HARDENED)
 echo ====================================================
 echo.

@@ -207,19 +207,29 @@ async function connect() {
             if (len === 0) return;
             const frame = JSON.parse(new TextDecoder().decode(new Uint8Array(e.data, 4, len)));
 
-            if (frame.type === 'ECDH_EXCHANGE') {
+            // PFS-FIX: HANDSHAKE_ACK — El servidor ya no hace ECDH.
+            // Al recibir el ACK, el cliente genera su par ECDH efímero y envía
+            // la clave pública para que el servidor la retransmita al Admin.
+            if (frame.type === 'HANDSHAKE_ACK') {
                 const clientPubHex = await generateClientECDH();
-                await computeECDHSharedSecret(frame.serverPublicKey);
-                sendStrictFrame(JSON.stringify({ type: 'ECDH_CLIENT_KEY', clientPublicKey: clientPubHex }));
+                sendStrictFrame(JSON.stringify({ type: 'ECDH_EXCHANGE', publicKey: clientPubHex }));
                 return;
             }
 
-            if (frame.type === 'ECDH_COMPLETE') {
+            // PFS-FIX: ECDH_EXCHANGE — Recibe la clave pública del Admin (no del servidor).
+            // El servidor solo retransmitió este mensaje sin leerlo (Zero-Knowledge relay).
+            // Ahora el cliente computa el secreto compartido localmente con la clave
+            // pública del Admin y su propia clave privada ECDH efímera.
+            if (frame.type === 'ECDH_EXCHANGE') {
+                await computeECDHSharedSecret(frame.publicKey);
                 // PARCHE HALLAZGO-C: Abortar si el ECDH no completó correctamente.
                 if (!ecdhSharedSecret || !pfsReady) {
                     ws.close(1008, 'PFS_NOT_READY');
                     return;
                 }
+                // Si ya hay un worker activo (re-keying por reconexión del admin),
+                // terminarlo y reinicializar con el nuevo secreto compartido.
+                if (worker) worker.terminate();
                 initWorker().catch(e => alert(e));
                 return;
             }

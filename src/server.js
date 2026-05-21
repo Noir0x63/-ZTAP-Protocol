@@ -12,8 +12,8 @@ let adminSocket = null;
 const activeSessionIds = new Set();
 let RELAY_ENABLED = true;
 
-const dataDir = process.env.ZTAP_DATA_DIR || path.join(__dirname, '..');
-const VAULT_FILE = path.join(dataDir, 'vault.json');
+let dataDir = process.env.ZTAP_DATA_DIR || path.join(__dirname, '..');
+let VAULT_FILE = path.join(dataDir, 'vault.json');
 const MAX_VAULT_SIZE = 5000;
 const CHALLENGE_TTL = 30000;
 const MSG_RATE_LIMIT = 50;
@@ -26,12 +26,20 @@ const MAX_INPUT_LENGTH = 4096;
 
 let HMAC_SECRET = null;
 let SERVER_NONCE = null;
-try {
-    const secrets = JSON.parse(fsSync.readFileSync(path.join(dataDir, 'server_secrets.enc'), 'utf8'));
-    HMAC_SECRET = secrets.adminSecret;
-    SERVER_NONCE = secrets.serverNonce;
-} catch (e) {
-    console.error('[SERVER] CRITICAL: server_secrets.enc not found. Run keygen.js first.');
+
+async function initSecrets(customDir) {
+    if (customDir) {
+        dataDir = customDir;
+        VAULT_FILE = path.join(dataDir, 'vault.json');
+    }
+    try {
+        const secrets = JSON.parse(fsSync.readFileSync(path.join(dataDir, 'server_secrets.enc'), 'utf8'));
+        HMAC_SECRET = secrets.adminSecret;
+        SERVER_NONCE = secrets.serverNonce;
+    } catch (e) {
+        console.error('[SERVER] CRITICAL: server_secrets.enc not found.');
+    }
+    await loadVault();
 }
 
 function computeAdminPath(dayOffset = 0) {
@@ -100,13 +108,9 @@ function verifyPoW(ws, nonce) {
     return false;
 }
 
-const sessionECDH = new Map();
-
-function generateECDHKeyPair() {
-    const ecdh = crypto.createECDH('prime256v1');
-    ecdh.generateKeys();
-    return ecdh;
-}
+// PFS-FIX: sessionECDH y generateECDHKeyPair eliminados.
+// El servidor ya no participa en el ECDH. Solo retransmite claves
+// públicas entre cliente y admin para E2EE real.
 
 const sessionSockets = new Map();
 const challenges = new Map();
@@ -126,7 +130,7 @@ async function loadVault() {
         messageVault = JSON.parse(data).slice(-MAX_VAULT_SIZE);
     } catch (e) { messageVault = []; }
 }
-loadVault();
+// Removed auto-loadVault call, now handled in initSecrets
 
 let vaultMutex = Promise.resolve();
 
@@ -166,7 +170,7 @@ setInterval(() => {
                 sessionSockets.delete(sessionId);
             }
             activeSessions.delete(sessionId);
-            sessionECDH.delete(sessionId);
+            // PFS-FIX: sessionECDH.delete eliminado — el servidor ya no almacena material ECDH.
         }
     }
     for (const [ip, expiry] of ipBanList) {
@@ -298,6 +302,9 @@ wss.on('connection', (ws) => {
                 return ws.close(1008);
             }
 
+            // PFS-FIX: HANDSHAKE — El servidor ya no genera pares ECDH.
+            // Solo registra la sesión y envía un ACK. El cliente iniciará
+            // el intercambio ECDH directamente con el Admin (E2EE).
             if (data.type === 'HANDSHAKE') {
                 if (ws.sessionId) return;
                 if (!validateSessionId(data.sessionId)) return ws.close(1008);
@@ -307,39 +314,47 @@ wss.on('connection', (ws) => {
                 clearTimeout(hTimeout);
                 ws.sessionId = data.sessionId;
 
-                if (!sessionECDH.has(data.sessionId)) {
-                    const ecdh = generateECDHKeyPair();
-                    sessionECDH.set(data.sessionId, { ecdh, sharedKey: null });
-                }
-                const ecdhData = sessionECDH.get(data.sessionId);
-                const serverECDHPublic = ecdhData.ecdh.getPublicKey('hex');
-
                 activeSessions.set(ws.sessionId, {
                     count: count + 1,
                     createdAt: sessionInfo ? sessionInfo.createdAt : now
                 });
 
-                sendStrictFrame(ws, {
-                    type: 'ECDH_EXCHANGE',
-                    serverPublicKey: serverECDHPublic
-                });
+                // Registrar socket temprano para que el relay ECDH lo encuentre.
+                if (!sessionSockets.has(ws.sessionId)) sessionSockets.set(ws.sessionId, new Set());
+                sessionSockets.get(ws.sessionId).add(ws);
+
+                sendStrictFrame(ws, { type: 'HANDSHAKE_ACK' });
                 return;
             }
 
-            if (data.type === 'ECDH_CLIENT_KEY') {
-                if (!data.clientPublicKey || typeof data.clientPublicKey !== 'string') return ws.close(1008);
-                if (data.clientPublicKey.length > 256) return ws.close(1008);
-                const ecdhData = sessionECDH.get(ws.sessionId);
-                if (!ecdhData) return ws.close(1008);
-                try {
-                    const sharedSecret = ecdhData.ecdh.computeSecret(Buffer.from(data.clientPublicKey, 'hex'));
-                    ecdhData.sharedKey = crypto.createHash('sha256')
-                        .update(sharedSecret)
-                        .update(Buffer.from(ws.sessionId, 'hex'))
-                        .digest();
-                    sendStrictFrame(ws, { type: 'ECDH_COMPLETE', status: 'ok' });
-                } catch (e) {
-                    ws.close(1008);
+            // PFS-FIX: ECDH_EXCHANGE — Relay Zero-Knowledge.
+            // El servidor retransmite claves públicas ECDH entre cliente y admin
+            // sin generarlas, leerlas ni almacenarlas. Nunca toca material criptográfico.
+            if (data.type === 'ECDH_EXCHANGE') {
+                if (!data.publicKey || typeof data.publicKey !== 'string') return ws.close(1008);
+                if (data.publicKey.length > 256) return ws.close(1008);
+
+                if (ws === adminSocket) {
+                    // Admin → Cliente: enrutar al socket de la sesión objetivo.
+                    if (!data.targetSession || !validateSessionId(data.targetSession)) return;
+                    const sockets = sessionSockets.get(data.targetSession);
+                    if (sockets) {
+                        for (const s of sockets) {
+                            if (s.readyState === WebSocket.OPEN) {
+                                sendStrictFrame(s, { type: 'ECDH_EXCHANGE', publicKey: data.publicKey });
+                            }
+                        }
+                    }
+                } else {
+                    // Cliente → Admin: almacenar en el socket y retransmitir si admin está conectado.
+                    ws.ecdhPublicKey = data.publicKey;
+                    if (adminSocket && adminSocket.readyState === WebSocket.OPEN) {
+                        sendStrictFrame(adminSocket, {
+                            type: 'ECDH_EXCHANGE',
+                            publicKey: data.publicKey,
+                            sessionId: ws.sessionId
+                        });
+                    }
                 }
                 return;
             }
@@ -379,7 +394,20 @@ wss.on('connection', (ws) => {
                         ws.authenticated = true;
                         challenges.delete(ws);
                         for (let msg of messageVault) sendStrictFrame(ws, { type: 'HISTORY', data: msg });
+                        // PFS-FIX: Al conectar admin, retransmitir claves ECDH pendientes
+                        // de clientes activos ANTES de initData. Admin necesita completar
+                        // el handshake ECDH E2EE con cada cliente para derivar las claves.
                         for (let [sid, sockets] of sessionSockets) {
+                            for (let s of sockets) {
+                                if (s.ecdhPublicKey && s.readyState === WebSocket.OPEN) {
+                                    sendStrictFrame(ws, {
+                                        type: 'ECDH_EXCHANGE',
+                                        publicKey: s.ecdhPublicKey,
+                                        sessionId: sid
+                                    });
+                                    break;
+                                }
+                            }
                             for (let s of sockets) {
                                 if (s.initData) { sendStrictFrame(ws, { type: 'NEW_MESSAGE', data: { timestamp: Date.now(), content: s.initData } }); break; }
                             }
@@ -530,7 +558,7 @@ wss.on('connection', (ws) => {
             if (session) {
                 if (session.count <= 1) {
                     activeSessions.delete(ws.sessionId);
-                    sessionECDH.delete(ws.sessionId);
+                    // PFS-FIX: sessionECDH.delete eliminado — ya no existe material ECDH en servidor.
                 } else {
                     session.count--;
                 }
@@ -542,9 +570,12 @@ wss.on('connection', (ws) => {
     });
 });
 
-server.listen(process.env.PORT || 3000);
-
 module.exports = {
+    start: async (dir) => {
+        await initSecrets(dir);
+        server.listen(process.env.PORT || 3000);
+        console.log('[SERVER] ZTAP Secure Relay started.');
+    },
     setRelayStatus: (status) => { 
         RELAY_ENABLED = status;
         if (!status) {

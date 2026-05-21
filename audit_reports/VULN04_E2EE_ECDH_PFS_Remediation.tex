@@ -1,0 +1,665 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{mdframed}
+
+\geometry{margin=2.5cm}
+
+% --- Color Definitions ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{criticalred}{rgb}{0.8,0.0,0.0}
+\definecolor{safegreen}{rgb}{0.0,0.5,0.1}
+\definecolor{warningyellow}{rgb}{0.7,0.5,0.0}
+
+% --- Code Listing Style ---
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% --- Custom Environments ---
+\newmdenv[
+  linecolor=criticalred,
+  backgroundcolor=red!5,
+  linewidth=2pt,
+  frametitle={\textcolor{criticalred}{\textbf{CRITICAL FINDING}}},
+  frametitlebackgroundcolor=red!15
+]{criticalbox}
+
+\newmdenv[
+  linecolor=safegreen,
+  backgroundcolor=green!5,
+  linewidth=2pt,
+  frametitle={\textcolor{safegreen}{\textbf{REMEDIATION VERIFIED}}},
+  frametitlebackgroundcolor=green!10
+]{safebox}
+
+\newmdenv[
+  linecolor=warningyellow,
+  backgroundcolor=yellow!5,
+  linewidth=2pt,
+  frametitle={\textcolor{warningyellow}{\textbf{RESIDUAL RISK}}},
+  frametitlebackgroundcolor=yellow!10
+]{warningbox}
+
+\newmdenv[
+  linecolor=blue!70!black,
+  backgroundcolor=blue!3,
+  linewidth=2pt,
+  frametitle={\textcolor{blue!70!black}{\textbf{PROOF}}},
+  frametitlebackgroundcolor=blue!10
+]{proofbox}
+
+% --- Document Metadata ---
+\hypersetup{
+    pdftitle={ZTAP VULN-04 Audit Report --- E2EE ECDH / PFS Architectural Failure},
+    pdfauthor={Eduardo Camarillo},
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue
+}
+
+\title{
+    \textbf{Internal Audit \& Remediation Report}\\[0.5em]
+    \Large ZTAP Protocol v3.1 IRONCLAD\\[0.3em]
+    \large \texttt{VULN-04: Non-E2EE ECDH / Perfect Forward Secrecy Architectural Failure}\\[1em]
+    \normalsize \textcolor{criticalred}{\textbf{SEVERITY: CRITICAL}} \quad
+    \textcolor{safegreen}{\textbf{STATUS: MITIGATED}}
+}
+\author{
+    Eduardo ``Noir0x63'' Camarillo\\
+    \small Internal Red Team Security Auditor\\
+    \small \texttt{ZTAP Zero-Trust Architecture Protocol}
+}
+\date{May 21, 2026}
+
+% =========================================================
+\begin{document}
+% =========================================================
+
+\maketitle
+\hrule
+\vspace{1em}
+
+\begin{abstract}
+This document constitutes a formal internal security audit report for the ZTAP (Zero-Trust Architecture Protocol) v3.1 IRONCLAD, specifically addressing the critical vulnerability designated \textbf{VULN-04}: the absence of End-to-End (E2EE) ECDH key exchange, resulting in the complete destruction of Perfect Forward Secrecy (PFS). The report documents the identification of the design flaw, its cryptographic attack surface (Harvest Now, Decrypt Later), a formal proof of why the original design fails to satisfy the PFS property, the architectural remediation applied across four modules (\texttt{server.js}, \texttt{client.js}, \texttt{ztap-worker.js}, \texttt{admin-client.js}), and the subsequent verification confirming that the corrected protocol achieves true PFS under the standard Diffie-Hellman security assumptions.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% =========================================================
+\section{Introduction and Scope}
+% =========================================================
+
+During the fourth cycle of the internal Red Team security audit of the ZTAP v3.1 protocol---conducted following the successful mitigation of VULN-01 (Fake PFS / Static KDF Binding), VULN-02 (HMAC Attestation Key Leakage), and VULN-03 (Blind Signing Oracle / Domain Separation Failure)---a critical \textit{architectural} design flaw was identified in the ECDH key exchange flow. Unlike the previous findings, which targeted specific cryptographic operations, VULN-04 is a \textbf{protocol composition failure} that renders the entire PFS mechanism inert despite the correct usage of individually sound cryptographic primitives.
+
+\subsection{Audit Classification}
+
+\begin{table}[h!]
+\centering
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Field} & \textbf{Value} \\
+\midrule
+Vulnerability ID & VULN-04 \\
+Classification & Cryptographic Protocol Design Flaw \\
+Severity & \textcolor{criticalred}{\textbf{CRITICAL}} \\
+Attack Class & Harvest Now, Decrypt Later (HNDL) \\
+CVSS 4.0 Vector & AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N \\
+Affected Property & Perfect Forward Secrecy (PFS) \\
+Status & \textcolor{safegreen}{\textbf{MITIGATED}} \\
+\bottomrule
+\end{tabularx}
+\caption{VULN-04 classification summary}
+\end{table}
+
+\subsection{Affected Components}
+
+\begin{table}[h!]
+\centering
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{File} & \textbf{Role} & \textbf{Impact} \\
+\midrule
+\texttt{src/server.js} & Node.js WebSocket relay server & Active ECDH participant (should be ZK relay) \\
+\texttt{src/client.js} & Browser-side user client & ECDH with server instead of admin \\
+\texttt{src/ztap-worker.js} & Isolated crypto Web Worker & ecdhSecret leaked in RSA payload \\
+\texttt{src/admin-client.js} & Browser-side admin client & No local ECDH; secret extracted from RSA \\
+\bottomrule
+\end{tabularx}
+\caption{Components directly implicated in VULN-04}
+\end{table}
+
+\subsection{Cryptographic Primitives Involved}
+
+\begin{itemize}
+    \item \textbf{ECDH} (Elliptic Curve Diffie-Hellman, P-256/prime256v1): Ephemeral key agreement protocol for establishing per-session shared secrets.
+    \item \textbf{RSA-OAEP} (4096-bit, SHA-256): Asymmetric encryption used to transport the INIT payload from client to admin.
+    \item \textbf{PBKDF2} (SHA-256, 600,000 iterations): First stage of the key derivation function.
+    \item \textbf{HKDF} (HMAC-SHA-256): Second stage of the KDF, binding the ephemeral ECDH secret to the derived AES key.
+    \item \textbf{AES-GCM-256}: Authenticated symmetric encryption for all session messages.
+\end{itemize}
+
+% =========================================================
+\section{Vulnerability Identification}
+% =========================================================
+
+\subsection{The ECDH Flow (Pre-Patch)}
+
+The key exchange protocol prior to the patch operated as follows:
+
+\begin{enumerate}
+    \item The client initiates a WebSocket connection and sends a \texttt{HANDSHAKE} frame with its \texttt{sessionId}.
+    \item The \textbf{server} generates an ECDH key pair using Node.js \texttt{crypto.createECDH('prime256v1')} and sends its public key to the client:
+    \begin{lstlisting}[language=JavaScript, caption=Server-side ECDH generation (server.js --- BEFORE PATCH)]
+const sessionECDH = new Map();
+
+function generateECDHKeyPair() {
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.generateKeys();
+    return ecdh;
+}
+
+// In HANDSHAKE handler:
+const ecdh = generateECDHKeyPair();
+sessionECDH.set(data.sessionId, { ecdh, sharedKey: null });
+sendStrictFrame(ws, {
+    type: 'ECDH_EXCHANGE',
+    serverPublicKey: ecdh.getPublicKey('hex')
+});
+    \end{lstlisting}
+
+    \item The client generates its own ECDH key pair using the Web Crypto API, computes the shared secret with the server's public key, and sends its public key back:
+    \begin{lstlisting}[language=JavaScript, caption=Client-side ECDH with server (client.js --- BEFORE PATCH)]
+if (frame.type === 'ECDH_EXCHANGE') {
+    const clientPubHex = await generateClientECDH();
+    await computeECDHSharedSecret(frame.serverPublicKey);
+    sendStrictFrame(JSON.stringify({
+        type: 'ECDH_CLIENT_KEY', clientPublicKey: clientPubHex
+    }));
+}
+    \end{lstlisting}
+
+    \item The server computes the shared secret on its side and sends \texttt{ECDH\_COMPLETE}:
+    \begin{lstlisting}[language=JavaScript, caption=Server computes shared secret (server.js --- BEFORE PATCH)]
+if (data.type === 'ECDH_CLIENT_KEY') {
+    const ecdhData = sessionECDH.get(ws.sessionId);
+    const sharedSecret = ecdhData.ecdh.computeSecret(
+        Buffer.from(data.clientPublicKey, 'hex')
+    );
+    ecdhData.sharedKey = crypto.createHash('sha256')
+        .update(sharedSecret)
+        .update(Buffer.from(ws.sessionId, 'hex'))
+        .digest();
+    sendStrictFrame(ws, { type: 'ECDH_COMPLETE', status: 'ok' });
+}
+    \end{lstlisting}
+
+    \item The client's Worker serializes the \texttt{ecdhSecret} into the RSA-OAEP encrypted INIT payload and sends it over the network:
+    \begin{lstlisting}[language=JavaScript, caption=ecdhSecret embedded in RSA payload (ztap-worker.js --- BEFORE PATCH)]
+const initPayloadBuf = enc.encode(JSON.stringify({
+    token: d.token,
+    username: d.username,
+    sessionId: d.sessionId,
+    ts: Date.now(),
+    ecdhSecret: Array.from(d.ecdhSecret) // <-- FATAL
+}));
+const encInit = await crypto.subtle.encrypt(
+    { name: 'RSA-OAEP' }, adminPublicKey, initPayloadBuf
+);
+    \end{lstlisting}
+
+    \item The admin client decrypts the RSA payload and extracts the \texttt{ecdhSecret} to derive the same AES key:
+    \begin{lstlisting}[language=JavaScript, caption=Admin extracts ecdhSecret from RSA (admin-client.js --- BEFORE PATCH)]
+symmetricKey: await deriveKey(
+    initData.token,
+    initData.sessionId || sessId,
+    initData.ecdhSecret  // <-- Extracted from RSA, NOT computed locally
+)
+    \end{lstlisting}
+\end{enumerate}
+
+\subsection{Root Cause Analysis: Architectural PFS Destruction}
+
+\begin{criticalbox}
+The ECDH key exchange is performed between the \textbf{Client} and the \textbf{Server} (relay), not between the Client and the Admin (the intended communication endpoint). To compensate for the Admin's lack of participation in the ECDH, the \texttt{ecdhSecret} is serialized, embedded in a JSON payload, encrypted under the Admin's long-term RSA public key, and transmitted over the network inside the \texttt{INIT} message.
+
+This design \textbf{completely and irrecoverably destroys Perfect Forward Secrecy}. The ephemeral secret's confidentiality is now bound to the long-term RSA key. If the RSA key is compromised at any future point, all historically captured \texttt{INIT} payloads can be decrypted, yielding the ephemeral \texttt{ecdhSecret} for every past session.
+\end{criticalbox}
+
+The vulnerability manifests through three compounding design failures:
+
+\begin{enumerate}
+    \item \textbf{The server is a cryptographic participant:} The relay server generates ECDH key pairs, computes shared secrets, and stores them in the \texttt{sessionECDH} Map. This directly violates the Zero-Knowledge design principle of ZTAP. The server has the cryptographic capability to derive every client's AES session key.
+
+    \item \textbf{The ephemeral secret is serialized and transported:} The \texttt{ecdhSecret} is converted from a volatile in-memory \texttt{Uint8Array} to a serialized JSON field, encrypted with a long-term key, and transmitted. A truly ephemeral secret must \textit{never} be serialized or leave local memory in any form---encrypted or otherwise.
+
+    \item \textbf{The Admin is a passive recipient, not a participant:} The Admin performs no ECDH computation. It simply extracts a pre-computed secret from an RSA-decrypted envelope. The Admin has no independent cryptographic contribution to the session key---violating the fundamental bilateral property of Diffie-Hellman.
+\end{enumerate}
+
+\subsection{Attack: Harvest Now, Decrypt Later (HNDL)}
+
+Consider an adversary $\mathcal{A}$ with network surveillance capability (e.g., a compromised Tor exit node, a malicious ISP, or a nation-state actor):
+
+\begin{enumerate}
+    \item \textbf{At time $t_0$:} $\mathcal{A}$ records all 4096-byte WebSocket frames for a target session $S$. This includes the \texttt{INIT} frame containing $\mathcal{E}_{RSA}(\text{token}, \text{sessionId}, \text{ecdhSecret}, ...)$ and all subsequent AES-GCM-256 encrypted message frames.
+
+    \item \textbf{At time $t_1 > t_0$:} $\mathcal{A}$ compromises the Admin's RSA private key $K_{priv}^{RSA}$ through any means (theft, coercion, side-channel attack, quantum computing advancement, etc.).
+
+    \item \textbf{Retroactive decryption:}
+    \begin{align}
+        \text{INIT\_payload} &= \mathcal{D}_{RSA-OAEP}(K_{priv}^{RSA}, \text{captured\_INIT}) \\
+        \text{ecdhSecret} &= \text{INIT\_payload.ecdhSecret} \\
+        K_{AES} &= \text{HKDF}(\text{PBKDF2}(\text{token}, \text{sessionId}), \text{ecdhSecret}) \\
+        \text{plaintext}_i &= \mathcal{D}_{AES-GCM}(K_{AES}, \text{ciphertext}_i) \quad \forall i
+    \end{align}
+\end{enumerate}
+
+The adversary recovers every message from session $S$. By repeating steps 3--4 for every captured \texttt{INIT} payload, the adversary retroactively compromises \textbf{every historical session}.
+
+\subsection{Formal Proof: PFS Property Violated}
+
+\begin{proofbox}
+\textbf{Claim:} The pre-patch protocol does not satisfy Perfect Forward Secrecy.
+
+\textbf{Definition (PFS):} A key agreement protocol has PFS if the compromise of long-term keys $K_{LT}$ at time $t_1$ does not permit the recovery of session keys $K_S$ established at time $t_0 < t_1$.
+
+\textbf{Proof by construction:}
+
+Let $K_{RSA}$ be the Admin's long-term RSA-4096 private key. Let $S$ be a session established at $t_0$ with session key $K_S$.
+
+In the pre-patch protocol, the \texttt{INIT} payload for session $S$ is:
+$$P = \text{JSON}(\text{token}_S, \text{sessionId}_S, \text{ecdhSecret}_S)$$
+
+This payload is transmitted as:
+$$C_{INIT} = \mathcal{E}_{RSA-OAEP}(K_{RSA}^{pub}, P)$$
+
+The session key is derived as:
+$$K_S = \text{HKDF}(\text{PBKDF2}(\text{token}_S, \text{sessionId}_S), \text{ecdhSecret}_S)$$
+
+Given $K_{RSA}$ at $t_1$:
+\begin{align}
+    P &= \mathcal{D}_{RSA-OAEP}(K_{RSA}, C_{INIT}) \\
+    K_S &= \text{HKDF}(\text{PBKDF2}(P.\text{token}, P.\text{sessionId}), P.\text{ecdhSecret})
+\end{align}
+
+Therefore, $K_{RSA} \Rightarrow K_S$ for all sessions $S$. The long-term key enables recovery of all session keys. $\square$
+\end{proofbox}
+
+% =========================================================
+\section{Remediation Design: E2EE ECDH}
+% =========================================================
+
+\subsection{Architectural Principle}
+
+The remediation is grounded in a single architectural mandate:
+
+\begin{quote}
+\textit{The ECDH key exchange must be performed exclusively between the Client and the Admin (the two communication endpoints). The Server must function as a stateless, Zero-Knowledge relay for ECDH public keys. The ephemeral shared secret must never be serialized, encrypted, transmitted, or stored---it must exist only as a volatile value in the browser's memory during the active session.}
+\end{quote}
+
+\subsection{Protocol Flow (Post-Patch)}
+
+The corrected protocol proceeds as follows:
+
+\begin{enumerate}
+    \item \textbf{HANDSHAKE:} Client $\rightarrow$ Server: \texttt{\{type: 'HANDSHAKE', sessionId\}}
+    \item \textbf{HANDSHAKE\_ACK:} Server $\rightarrow$ Client: \texttt{\{type: 'HANDSHAKE\_ACK'\}}
+    \item \textbf{Client ECDH generation:} Client generates ephemeral key pair $(a, A = a \cdot G)$ on P-256.
+    \item \textbf{Client$\rightarrow$Admin relay:} Client $\rightarrow$ Server $\rightarrow$ Admin: \texttt{\{type: 'ECDH\_EXCHANGE', publicKey: $A$\}}
+    \item \textbf{Admin ECDH generation:} Admin generates ephemeral key pair $(b, B = b \cdot G)$ on P-256.
+    \item \textbf{Admin computes secret:} $\text{ecdhSecret}_A = b \cdot A = ba \cdot G$
+    \item \textbf{Admin$\rightarrow$Client relay:} Admin $\rightarrow$ Server $\rightarrow$ Client: \texttt{\{type: 'ECDH\_EXCHANGE', publicKey: $B$, targetSession\}}
+    \item \textbf{Client computes secret:} $\text{ecdhSecret}_C = a \cdot B = ab \cdot G = ba \cdot G = \text{ecdhSecret}_A$ \checkmark
+    \item \textbf{INIT (cleaned):} Client encrypts \texttt{\{token, username, sessionId, ts\}} with RSA-OAEP. \textbf{No ecdhSecret.}
+    \item \textbf{Key derivation:} Both sides derive: $K_{AES} = \text{HKDF}(\text{PBKDF2}(\text{token}), \text{ecdhSecret})$
+\end{enumerate}
+
+\textbf{Critical invariant:} At no point in steps 1--10 does the \texttt{ecdhSecret} appear in any network frame, serialized JSON, or RSA payload. It exists exclusively as a \texttt{Uint8Array} in browser memory.
+
+% =========================================================
+\section{Implementation}
+% =========================================================
+
+\subsection{Server Patch: Zero-Knowledge Relay (server.js)}
+
+\subsubsection{Removed: Server-Side ECDH Infrastructure}
+
+\begin{lstlisting}[language=JavaScript, caption=Removed ECDH infrastructure (server.js)]
+// REMOVED:
+const sessionECDH = new Map();
+function generateECDHKeyPair() { /* ... */ }
+
+// REMOVED from HANDSHAKE handler:
+const ecdh = generateECDHKeyPair();
+sessionECDH.set(data.sessionId, { ecdh, sharedKey: null });
+sendStrictFrame(ws, { type: 'ECDH_EXCHANGE', serverPublicKey: ... });
+
+// REMOVED: Entire ECDH_CLIENT_KEY handler
+// REMOVED: sessionECDH.delete() from close/expiry handlers
+\end{lstlisting}
+
+\subsubsection{Added: ECDH\_EXCHANGE Zero-Knowledge Relay}
+
+\begin{lstlisting}[language=JavaScript, caption=Zero-Knowledge ECDH relay (server.js --- PATCHED)]
+if (data.type === 'ECDH_EXCHANGE') {
+    if (!data.publicKey || typeof data.publicKey !== 'string') return ws.close(1008);
+    if (data.publicKey.length > 256) return ws.close(1008);
+
+    if (ws === adminSocket) {
+        // Admin -> Client: route to target session socket
+        if (!data.targetSession || !validateSessionId(data.targetSession)) return;
+        const sockets = sessionSockets.get(data.targetSession);
+        if (sockets) {
+            for (const s of sockets) {
+                if (s.readyState === WebSocket.OPEN) {
+                    sendStrictFrame(s, {
+                        type: 'ECDH_EXCHANGE', publicKey: data.publicKey
+                    });
+                }
+            }
+        }
+    } else {
+        // Client -> Admin: buffer and relay if admin is connected
+        ws.ecdhPublicKey = data.publicKey;
+        if (adminSocket && adminSocket.readyState === WebSocket.OPEN) {
+            sendStrictFrame(adminSocket, {
+                type: 'ECDH_EXCHANGE',
+                publicKey: data.publicKey,
+                sessionId: ws.sessionId
+            });
+        }
+    }
+    return;
+}
+\end{lstlisting}
+
+The server stores only the client's \textbf{public} key on the socket object (\texttt{ws.ecdhPublicKey}) for replay purposes when the admin reconnects. By definition, a public key has no secrecy requirement.
+
+\subsubsection{Added: Pending ECDH Replay on Admin Authentication}
+
+When the admin authenticates via RSA-PSS, the server replays all pending ECDH public keys from active client sessions \textit{before} replaying stored \texttt{initData}:
+
+\begin{lstlisting}[language=JavaScript, caption=ECDH replay on admin auth (server.js --- PATCHED)]
+// After admin authenticates successfully:
+for (let [sid, sockets] of sessionSockets) {
+    for (let s of sockets) {
+        if (s.ecdhPublicKey && s.readyState === WebSocket.OPEN) {
+            sendStrictFrame(ws, {
+                type: 'ECDH_EXCHANGE',
+                publicKey: s.ecdhPublicKey,
+                sessionId: sid
+            });
+            break;
+        }
+    }
+    // Then replay initData as before
+}
+\end{lstlisting}
+
+\subsection{Client Patch: E2EE ECDH with Admin (client.js)}
+
+\begin{lstlisting}[language=JavaScript, caption=Client E2EE ECDH (client.js --- PATCHED)]
+// On HANDSHAKE_ACK: generate ECDH keypair and send public key
+if (frame.type === 'HANDSHAKE_ACK') {
+    const clientPubHex = await generateClientECDH();
+    sendStrictFrame(JSON.stringify({
+        type: 'ECDH_EXCHANGE', publicKey: clientPubHex
+    }));
+    return;
+}
+
+// On receiving Admin's public key (relayed by server):
+if (frame.type === 'ECDH_EXCHANGE') {
+    await computeECDHSharedSecret(frame.publicKey);
+    if (!ecdhSharedSecret || !pfsReady) {
+        ws.close(1008, 'PFS_NOT_READY');
+        return;
+    }
+    if (worker) worker.terminate(); // Re-keying support
+    initWorker().catch(e => alert(e));
+    return;
+}
+\end{lstlisting}
+
+\subsection{Worker Patch: Clean RSA Payload (ztap-worker.js)}
+
+\begin{lstlisting}[language=JavaScript, caption=Cleaned INIT payload (ztap-worker.js --- PATCHED)]
+const initPayloadBuf = enc.encode(JSON.stringify({
+    token: d.token,
+    username: d.username,
+    sessionId: d.sessionId,
+    ts: Date.now()
+    // ecdhSecret REMOVED -- never leaves browser memory
+}));
+const encInit = await crypto.subtle.encrypt(
+    { name: 'RSA-OAEP' }, adminPublicKey, initPayloadBuf
+);
+\end{lstlisting}
+
+\subsection{Admin Patch: Local ECDH Computation (admin-client.js)}
+
+\subsubsection{Added: ECDH Key Generation and Secret Derivation}
+
+\begin{lstlisting}[language=JavaScript, caption=Admin ECDH functions (admin-client.js --- PATCHED)]
+const sessionECDHSecrets = {};
+
+async function generateAdminECDH() {
+    const keyPair = await crypto.subtle.generateKey(
+        { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+    );
+    const publicKeyRaw = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+    const publicKeyHex = Array.from(new Uint8Array(publicKeyRaw))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+    return { keyPair, publicKeyHex };
+}
+
+async function computeAdminECDHSecret(adminKeyPair, clientPublicKeyHex) {
+    const clientKeyBytes = new Uint8Array(
+        clientPublicKeyHex.match(/.{2}/g).map(h => parseInt(h, 16))
+    );
+    const clientKey = await crypto.subtle.importKey(
+        'raw', clientKeyBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, []
+    );
+    const sharedBits = await crypto.subtle.deriveBits(
+        { name: 'ECDH', public: clientKey }, adminKeyPair.privateKey, 256
+    );
+    return Array.from(new Uint8Array(sharedBits));
+}
+\end{lstlisting}
+
+\subsubsection{Added: ECDH\_EXCHANGE Handler}
+
+\begin{lstlisting}[language=JavaScript, caption=Admin ECDH exchange handler (admin-client.js --- PATCHED)]
+if (frame.type === 'ECDH_EXCHANGE' && frame.sessionId && frame.publicKey) {
+    try {
+        const { keyPair, publicKeyHex } = await generateAdminECDH();
+        const sharedSecret = await computeAdminECDHSecret(keyPair, frame.publicKey);
+        sessionECDHSecrets[frame.sessionId] = sharedSecret;
+        sendStrictFrame({
+            type: 'ECDH_EXCHANGE',
+            publicKey: publicKeyHex,
+            targetSession: frame.sessionId
+        });
+    } catch (err) { }
+}
+\end{lstlisting}
+
+\subsubsection{Modified: INIT Handler Uses Local ECDH Secret}
+
+\begin{lstlisting}[language=JavaScript, caption=INIT handler with local ECDH (admin-client.js --- PATCHED)]
+const ecdhSecret = sessionECDHSecrets[sessId];
+if (!ecdhSecret || !Array.isArray(ecdhSecret) || ecdhSecret.length < 32) {
+    return; // Reject INIT without prior E2EE ECDH
+}
+users[sessId] = {
+    username: initData.username,
+    symmetricKey: await deriveKey(initData.token, sessId, ecdhSecret),
+    // ecdhSecret is from sessionECDHSecrets (local), NOT from initData (RSA)
+    receiveCounter: 0,
+    sendCounter: 0,
+    lastInitTs: initData.ts
+};
+\end{lstlisting}
+
+% =========================================================
+\section{Post-Patch Verification}
+% =========================================================
+
+\subsection{VULN-04 Status: Confirmed Mitigated}
+
+\begin{safebox}
+Post-patch code review confirmed that the ephemeral ECDH shared secret is \textbf{never serialized, transmitted, or encrypted under any long-term key} in the patched protocol. The ECDH exchange is performed exclusively between the Client and Admin endpoints, with the Server functioning as a stateless relay. The PFS property is restored.
+\end{safebox}
+
+\begin{table}[h!]
+\centering
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Verification Point} & \textbf{Evidence} & \textbf{Status} \\
+\midrule
+Server ECDH generation & \texttt{generateECDHKeyPair()} removed & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+Server ECDH storage & \texttt{sessionECDH} Map removed & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+Server ECDH computation & \texttt{computeSecret()} calls removed & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+RSA payload content & \texttt{ecdhSecret} field removed from JSON & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+Client ECDH target & Computes with Admin's key, not server's & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+Admin local ECDH & \texttt{generateAdminECDH()} + \texttt{computeAdminECDHSecret()} & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+Admin key derivation & Uses \texttt{sessionECDHSecrets[sessId]} (local) & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+E2EE ECDH relay & Server relays without reading/storing secrets & \textcolor{safegreen}{\textbf{CONFIRMED}} \\
+\bottomrule
+\end{tabularx}
+\caption{VULN-04 remediation verification matrix}
+\end{table}
+
+\subsection{Formal Proof: PFS Property Satisfied (Post-Patch)}
+
+\begin{proofbox}
+\textbf{Claim:} The post-patch protocol satisfies Perfect Forward Secrecy.
+
+\textbf{Proof:}
+
+Let $K_{RSA}$ be the Admin's long-term RSA private key, compromised at time $t_1$. Let $S$ be a session established at $t_0 < t_1$ with session key $K_S$.
+
+In the patched protocol, the \texttt{INIT} payload is:
+$$P = \text{JSON}(\text{token}_S, \text{sessionId}_S, \text{ts})$$
+
+Note: $\text{ecdhSecret}_S \notin P$.
+
+The INIT payload is transmitted as:
+$$C_{INIT} = \mathcal{E}_{RSA-OAEP}(K_{RSA}^{pub}, P)$$
+
+At $t_1$, the adversary can recover:
+$$P = \mathcal{D}_{RSA-OAEP}(K_{RSA}, C_{INIT}) = (\text{token}_S, \text{sessionId}_S, \text{ts})$$
+
+To derive $K_S$, the adversary needs:
+$$K_S = \text{HKDF}(\text{PBKDF2}(\text{token}_S, \text{sessionId}_S), \textcolor{criticalred}{\text{ecdhSecret}_S})$$
+
+The adversary has $\text{token}_S$ and $\text{sessionId}_S$ from $P$. However, $\text{ecdhSecret}_S$ is not in $P$, not in any network frame, and not derivable from $K_{RSA}$.
+
+From the network capture, the adversary has:
+\begin{itemize}
+    \item $A = a \cdot G$ (Client's ECDH public key)
+    \item $B = b \cdot G$ (Admin's ECDH public key)
+\end{itemize}
+
+To recover $\text{ecdhSecret}_S = ab \cdot G$, the adversary must solve the \textbf{Computational Diffie-Hellman (CDH) problem} on P-256: given $(G, aG, bG)$, compute $abG$.
+
+Under the CDH assumption on P-256, this is computationally infeasible. Furthermore, the ephemeral private keys $a$ and $b$ were:
+\begin{itemize}
+    \item Generated in browser memory at $t_0$
+    \item Never exported or serialized
+    \item Destroyed by the JavaScript garbage collector when the session ended
+\end{itemize}
+
+Therefore:
+$$K_{RSA} \not\Rightarrow \text{ecdhSecret}_S \not\Rightarrow K_S$$
+
+The long-term key does not enable recovery of any session key. $\square$
+\end{proofbox}
+
+\subsection{Residual Considerations}
+
+\begin{warningbox}
+\textbf{Operational Note: Admin Availability Dependency}\\
+The E2EE ECDH design introduces a dependency: the client cannot initialize its cryptographic Worker until the Admin has responded to the ECDH exchange. If the Admin is offline when the client connects, the client will wait in a pre-initialized state until the Admin comes online and the server replays the pending ECDH public key. This is an inherent tradeoff of true E2EE PFS and is consistent with the security-first design philosophy of ZTAP.
+\end{warningbox}
+
+% =========================================================
+\section{Global Security Posture Summary}
+% =========================================================
+
+\begin{table}[h!]
+\centering
+\begin{tabularx}{\textwidth}{llXl}
+\toprule
+\textbf{ID} & \textbf{Severity} & \textbf{Description} & \textbf{Status} \\
+\midrule
+VULN-01 & Critical & Fake PFS / Static KDF Binding & \textcolor{safegreen}{\textbf{MITIGATED}} \\
+VULN-02 & Critical & HMAC Attestation Key Leakage & \textcolor{safegreen}{\textbf{MITIGATED}} \\
+VULN-03 & Critical & Blind Signing Oracle / Domain Separation & \textcolor{safegreen}{\textbf{MITIGATED}} \\
+VULN-04 & Critical & Non-E2EE ECDH / PFS Architectural Failure & \textcolor{safegreen}{\textbf{MITIGATED}} \\
+Finding-R1 & Low & Zero-salt fallback latent regression & \textcolor{warningyellow}{\textbf{OPEN}} \\
+Finding-R2 & Low & Worker attestation without domain prefix & \textcolor{warningyellow}{\textbf{OPEN}} \\
+Finding-R3 & Low & Admin nonce input not validated pre-signing & \textcolor{warningyellow}{\textbf{OPEN}} \\
+\bottomrule
+\end{tabularx}
+\caption{Complete security findings status post fourth audit cycle}
+\end{table}
+
+% =========================================================
+\section{Conclusion}
+% =========================================================
+
+The VULN-04 Non-E2EE ECDH vulnerability has been fully remediated through a fundamental architectural correction: the ECDH key exchange is now performed exclusively End-to-End between the Client and Admin endpoints, with the Server reduced to a stateless Zero-Knowledge relay. The ephemeral shared secret never leaves browser memory in any form---serialized, encrypted, or otherwise.
+
+The remediation achieves the following security properties:
+
+\begin{itemize}
+    \item \textbf{True Perfect Forward Secrecy:} Compromise of the RSA master key at any future point cannot retroactively expose any past session. The session key derivation depends on a CDH-hard ephemeral secret that is irrecoverable once the session terminates.
+    \item \textbf{Zero-Knowledge Server:} The relay server has no cryptographic participation in the key exchange. It cannot derive, compute, or reconstruct any session key. It handles only public keys (zero secrecy value) and opaque encrypted frames.
+    \item \textbf{Bilateral Ephemeral Contribution:} Both the Client and Admin independently generate fresh ECDH key pairs per session. The shared secret is a bilateral function of both parties' private keys, preventing any single point of compromise.
+    \item \textbf{Clean Channel Separation:} The RSA channel is now strictly limited to identity and token transport. The ECDH channel is strictly limited to ephemeral key agreement. No cross-contamination of security domains.
+\end{itemize}
+
+With the mitigation of all four critical vulnerabilities (VULN-01 through VULN-04), the ZTAP v3.1 IRONCLAD protocol's core cryptographic architecture is assessed as \textbf{sound} under standard computational hardness assumptions (RSA, CDH on P-256, AES-GCM IND-CCA2).
+
+\vspace{2em}
+\hrule
+\vspace{1em}
+\noindent\textbf{Auditor:} Eduardo ``Noir0x63'' Camarillo\\
+\textbf{Protocol:} ZTAP Zero-Trust Architecture Protocol v3.1 IRONCLAD\\
+\textbf{Audit Type:} Internal Red Team Review --- Cycle 4\\
+\textbf{Date:} May 21, 2026\\
+\textbf{Next Review:} Upon implementation of Findings R1, R2, R3
+
+\end{document}

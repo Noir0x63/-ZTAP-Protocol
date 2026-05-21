@@ -7,6 +7,12 @@ let selectedSessionId = null;
 let messages = [];
 let sessionId = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
 
+// PFS-FIX: Almacén de secretos ECDH efímeros por sesión.
+// El Admin ahora computa los secretos compartidos localmente en su navegador
+// mediante un intercambio ECDH E2EE con cada cliente. El servidor solo retransmite
+// las claves públicas sin acceso al material criptográfico.
+const sessionECDHSecrets = {};
+
 function bufferToBase64(buf) {
     let binary = '';
     const bytes = new Uint8Array(buf);
@@ -53,6 +59,32 @@ async function decryptEncryptedKey(envelopeJson, passphrase) {
     );
     const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, aesKey, encryptedWithTag);
     return new TextDecoder().decode(decrypted);
+}
+
+// PFS-FIX: Generación y cómputo ECDH local para E2EE con cada cliente.
+// Estas funciones son el espejo exacto de generateClientECDH() y
+// computeECDHSharedSecret() en client.js, garantizando compatibilidad
+// criptográfica bilateral sobre la curva P-256 (NIST/FIPS).
+async function generateAdminECDH() {
+    const keyPair = await crypto.subtle.generateKey(
+        { name: 'ECDH', namedCurve: 'P-256' },
+        true,
+        ['deriveBits']
+    );
+    const publicKeyRaw = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+    const publicKeyHex = Array.from(new Uint8Array(publicKeyRaw)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return { keyPair, publicKeyHex };
+}
+
+async function computeAdminECDHSecret(adminKeyPair, clientPublicKeyHex) {
+    const clientKeyBytes = new Uint8Array(clientPublicKeyHex.match(/.{2}/g).map(h => parseInt(h, 16)));
+    const clientKey = await crypto.subtle.importKey(
+        'raw', clientKeyBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, []
+    );
+    const sharedBits = await crypto.subtle.deriveBits(
+        { name: 'ECDH', public: clientKey }, adminKeyPair.privateKey, 256
+    );
+    return Array.from(new Uint8Array(sharedBits));
 }
 
 let pendingEncFile = null;
@@ -178,15 +210,26 @@ function connectAdmin() {
 
             if (frame.type === 'AUTH_CHALLENGE') {
                 // PATCH VULN-03: Domain Separation — Prevents Blind Signing Oracle.
-                // The raw server nonce is NEVER signed directly. Prepending the
-                // fixed context prefix 'ZTAP_ADMIN_AUTH:' cryptographically binds
-                // this signature exclusively to the admin authentication domain.
-                // A valid signature over this prefixed payload is mathematically
-                // inert in any other protocol context, neutralizing type confusion
-                // and cross-protocol replay attacks.
                 const separatedNonce = 'ZTAP_ADMIN_AUTH:' + frame.nonce;
                 const sig = await crypto.subtle.sign({ name: 'RSA-PSS', saltLength: 32 }, masterSignKey, new TextEncoder().encode(separatedNonce));
                 sendStrictFrame({ type: 'ADMIN_AUTH', signature: bufferToBase64(sig) });
+            }
+
+            // PFS-FIX: ECDH_EXCHANGE — Recibe la clave pública de un cliente (retransmitida
+            // por el servidor). El Admin genera un par ECDH efímero para esta sesión,
+            // computa el secreto compartido localmente y devuelve su clave pública.
+            // El servidor NUNCA ve ni toca el secreto compartido.
+            if (frame.type === 'ECDH_EXCHANGE' && frame.sessionId && frame.publicKey) {
+                try {
+                    const { keyPair, publicKeyHex } = await generateAdminECDH();
+                    const sharedSecret = await computeAdminECDHSecret(keyPair, frame.publicKey);
+                    sessionECDHSecrets[frame.sessionId] = sharedSecret;
+                    sendStrictFrame({
+                        type: 'ECDH_EXCHANGE',
+                        publicKey: publicKeyHex,
+                        targetSession: frame.sessionId
+                    });
+                } catch (err) { }
             }
 
             if (frame.type === 'HISTORY' || frame.type === 'NEW_MESSAGE') {
@@ -201,12 +244,20 @@ function connectAdmin() {
                         const existing = users[sessId];
                         if (existing && initData.ts <= existing.lastInitTs) return;
                         if (Math.abs(Date.now() - initData.ts) > 600000) return;
+
+                        // PFS-FIX: Usar el secreto ECDH computado localmente (E2EE)
+                        // en lugar de extraerlo del payload RSA. Si no existe un
+                        // secreto ECDH local para esta sesión, rechazar el INIT.
+                        const ecdhSecret = sessionECDHSecrets[sessId];
+                        if (!ecdhSecret || !Array.isArray(ecdhSecret) || ecdhSecret.length < 32) {
+                            return; // No hay ECDH E2EE completado para esta sesión.
+                        }
+
                         users[sessId] = {
                             username: initData.username,
-                            // PARCHE VULN-1: Incluir el ecdhSecret del Admin INIT para derivar la misma
-                            // clave AES-GCM que usa el cliente. Sin este secreto efímero, la clave
-                            // no puede reconstruirse retroactivamente (PFS real).
-                            symmetricKey: await deriveKey(initData.token, initData.sessionId || sessId, initData.ecdhSecret),
+                            // PFS-FIX: deriveKey ahora usa el secreto ECDH E2EE local,
+                            // NO el que viajaba dentro del RSA. PFS real.
+                            symmetricKey: await deriveKey(initData.token, initData.sessionId || sessId, ecdhSecret),
                             receiveCounter: 0,
                             sendCounter: 0,
                             lastInitTs: initData.ts

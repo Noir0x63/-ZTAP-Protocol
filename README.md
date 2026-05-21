@@ -170,12 +170,12 @@ ZTAP v3.1 introduces a **Native Desktop Client** (Electron) designed to complete
 | **Key Exchange** | RSA-4096 + ECDH P-256 | NIST SP 800-56A |
 | **Stream Cipher** | AES-256-GCM | NIST SP 800-38D |
 | **Key Derivation** | PBKDF2 (600k) + HKDF | OWASP 2025 |
-| **KDF Salt** | sessionId + ecdhSecret | High-entropy |
+| **KDF Salt** | sessionId + ecdhSecret (E2EE, never transmitted) | High-entropy |
 | **Signatures** | RSA-PSS (32-byte salt) | PKCS#1 v2.1 |
 | **Key Storage** | AES-256-GCM + PBKDF2 (600k) | Encrypted-at-rest |
 | **Admin Auth** | Browser-side decrypt + RSA-PSS C/R | Zero-trust |
 | **Attestation** | Server-side ECDSA verify + P1363 | Zero-knowledge |
-| **Forward Secrecy** | ECDH + HKDF ephemeral per session | PFS compliant |
+| **Forward Secrecy** | E2EE ECDH (Client↔Admin) + HKDF ephemeral | True PFS (VULN-04 fixed) |
 | **Anti-DoS** | Adaptive PoW (16–24 bit) | Dynamic scaling |
 | **Anti-Forensics** | EXIF/IPTC strip + 24h vault purge | Zero-persistence |
 | **Transport** | Tor Hidden Service | Onion routing |

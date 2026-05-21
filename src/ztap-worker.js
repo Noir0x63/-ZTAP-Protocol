@@ -123,15 +123,19 @@ self.onmessage = async (e) => {
             adminPublicKey = await crypto.subtle.importKey('spki', binaryDer, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
 
             const enc = new TextEncoder();
+            // PFS-FIX: El ecdhSecret ya NO se incluye en el payload RSA.
+            // Incluirlo antes destruía el PFS, ya que un compromiso futuro de la
+            // clave RSA privada permitía extraer el secreto efímero y descifrar
+            // todas las sesiones pasadas. Ahora el ECDH es estrictamente E2EE
+            // entre Cliente y Admin — el secreto compartido NUNCA sale de la memoria.
             const initPayloadBuf = enc.encode(JSON.stringify({
                 token: d.token,
                 username: d.username,
                 sessionId: d.sessionId,
-                ts: Date.now(),
-                ecdhSecret: Array.from(d.ecdhSecret)
+                ts: Date.now()
             }));
             const encInit = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, adminPublicKey, initPayloadBuf);
-            crypto.getRandomValues(initPayloadBuf); // PARCHE AUDITORIA: Destruir buffer de handshake (contiene token y ecdhSecret)
+            crypto.getRandomValues(initPayloadBuf); // PARCHE AUDITORIA: Destruir buffer de handshake (contiene token)
 
             // PARCHE HALLAZGO-D: Exportar SOLO la llave PÚBLICA (SPKI).
             const attestPubSpki = await crypto.subtle.exportKey('spki', attestKeyPair.publicKey);
